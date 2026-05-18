@@ -1,0 +1,55 @@
+name: Generate First Diagnosis Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "数据来源：csv 或 notion"
+        required: true
+        default: "csv"
+        type: choice
+        options:
+          - csv
+          - notion
+      customer_id:
+        description: "客户编号，例如 C001"
+        required: true
+        default: "C001"
+      dry_run:
+        description: "是否使用演示模式，不调用豆包"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate report
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_API_BASE: ${{ secrets.LLM_API_BASE }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        run: |
+          DRY_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          python -m src.main --source "${{ inputs.source }}" --customer-id "${{ inputs.customer_id }}" $DRY_FLAG
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-diagnosis-report-${{ inputs.customer_id }}
+          path: outputs/
