@@ -37,6 +37,9 @@ Settings → Secrets and variables → Actions → New repository secret
 LLM_API_KEY      火山方舟 API Key
 LLM_API_BASE     https://ark.cn-beijing.volces.com/api/v3
 LLM_MODEL        火山方舟推理接入点 ID，例如 ep-xxxxxxxx
+LLM_TIMEOUT_SECONDS 可选，默认 240
+LLM_MAX_RETRIES 可选，默认 2
+LLM_MAX_TOKENS 可选，默认 2500
 NOTION_TOKEN     Notion Internal Integration Secret
 NOTION_DATABASE_ID Notion 数据库 ID
 ```
@@ -147,6 +150,14 @@ LLM_MODEL    = 推理接入点 ID，通常 ep- 开头
 ```
 
 注意：`LLM_MODEL` 建议填火山方舟控制台中的推理接入点 ID，而不是模型展示名称。
+
+如果 GitHub Actions 调用豆包超时，可在 Secrets 中增加：
+
+```text
+LLM_TIMEOUT_SECONDS=300
+LLM_MAX_RETRIES=2
+LLM_MAX_TOKENS=2200
+```
 
 ## 人工质检清单
 
