@@ -1,0 +1,23 @@
+{
+  "customer_id": "客户编号",
+  "customer_name": "客户名称",
+  "platform": "平台",
+  "category": "类目",
+  "main_products": "主营产品",
+  "business_stage": "经营阶段",
+  "period": "数据周期",
+  "impressions": "曝光量",
+  "visitors": "访客数",
+  "orders": "订单数",
+  "gmv": "支付金额",
+  "aov": "客单价",
+  "conversion_rate": "转化率",
+  "ad_spend": "投放消耗",
+  "roi": "投产比",
+  "refund_rate": "退款率",
+  "weekly_activity": "本周活动/上新",
+  "customer_problem": "客户自述问题",
+  "report_status": "报告状态",
+  "report_link": "报告链接",
+  "notes": "备注"
+}
