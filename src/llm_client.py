@@ -1,13 +1,28 @@
 import json
 import os
+import socket
+import time
 import urllib.error
 import urllib.request
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def generate_with_doubao(system_prompt: str, user_prompt: str) -> str:
     api_key = os.getenv("LLM_API_KEY", "").strip()
     api_base = os.getenv("LLM_API_BASE", "https://ark.cn-beijing.volces.com/api/v3").strip().rstrip("/")
     model = os.getenv("LLM_MODEL", "").strip()
+    timeout_seconds = _env_int("LLM_TIMEOUT_SECONDS", 240)
+    max_retries = _env_int("LLM_MAX_RETRIES", 2)
+    max_tokens = _env_int("LLM_MAX_TOKENS", 2500)
 
     if not api_key:
         raise RuntimeError("缺少 LLM_API_KEY。请配置火山方舟 API Key。")
@@ -21,6 +36,7 @@ def generate_with_doubao(system_prompt: str, user_prompt: str) -> str:
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.3,
+        "max_tokens": max_tokens,
     }
 
     request = urllib.request.Request(
@@ -33,12 +49,25 @@ def generate_with_doubao(system_prompt: str, user_prompt: str) -> str:
         method="POST",
     )
 
-    try:
-        with urllib.request.urlopen(request, timeout=90) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"豆包/火山方舟调用失败：{exc.code} {detail}") from exc
+    last_error: Exception | None = None
+    for attempt in range(1, max_retries + 2):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                result = json.loads(response.read().decode("utf-8"))
+                break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"豆包/火山方舟调用失败：{exc.code} {detail}") from exc
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as exc:
+            last_error = exc
+            if attempt > max_retries:
+                raise RuntimeError(
+                    f"豆包/火山方舟调用超时或网络失败，已尝试 {attempt} 次。"
+                    f"可在 GitHub Secrets 中设置 LLM_TIMEOUT_SECONDS=300 后重试。原始错误：{exc}"
+                ) from exc
+            time.sleep(3 * attempt)
+    else:
+        raise RuntimeError(f"豆包/火山方舟调用失败：{last_error}")
 
     choices = result.get("choices", [])
     if not choices:
