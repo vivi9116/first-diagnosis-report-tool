@@ -1,0 +1,16 @@
+# Local secrets
+.env
+
+# Generated reports
+outputs/
+*.docx
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
