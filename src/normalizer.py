@@ -21,9 +21,27 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _int(value: Any) -> int | None:
+    number = _number(value)
+    if number is None:
+        return None
+    return int(number)
+
+
+def _bool(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value > 0
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "y", "是", "有", "已接入", "已提供"}
+
+
 def normalize_record(raw: Dict[str, Any], mapping: Dict[str, str]) -> CustomerData:
     def get(key: str) -> Any:
-        return raw.get(mapping[key], raw.get(key, ""))
+        return raw.get(mapping.get(key, key), raw.get(key, ""))
 
     return CustomerData(
         customer_id=_text(get("customer_id")),
@@ -47,4 +65,12 @@ def normalize_record(raw: Dict[str, Any], mapping: Dict[str, str]) -> CustomerDa
         report_status=_text(get("report_status")),
         report_link=_text(get("report_link")),
         notes=_text(get("notes")),
+        historical_weeks=_int(get("historical_weeks")),
+        has_platform_tier_data=_bool(get("has_platform_tier_data")),
+        has_industry_peer_data=_bool(get("has_industry_peer_data")),
+        has_gross_margin=_bool(get("has_gross_margin")),
+        has_ad_attribution=_bool(get("has_ad_attribution")),
+        has_product_cost=_bool(get("has_product_cost")),
+        has_inventory_data=_bool(get("has_inventory_data")),
+        data_source_notes=_text(get("data_source_notes")),
     )

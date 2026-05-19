@@ -33,6 +33,16 @@ AI电商首诊客户数据
 | 报告状态 | Select |
 | 报告链接 | URL |
 | 备注 | Text |
+| 历史数据周数 | Number |
+| 是否有平台同层级数据 | Checkbox 或 Select |
+| 是否有行业/同层级数据 | Checkbox 或 Select |
+| 是否有毛利率 | Checkbox 或 Select |
+| 是否有投放归因 | Checkbox 或 Select |
+| 是否有商品成本 | Checkbox 或 Select |
+| 是否有库存数据 | Checkbox 或 Select |
+| 数据来源说明 | Text |
+
+数据可用性字段用于控制报告判断边界。起步阶段可以只填 `历史数据周数=1`，其他字段填“否”或不填；连续经营周报跑到第4周后，再把历史数据周数改为4；跑到第12周后，再允许趋势判断。
 
 ## 3. 报告状态选项
 

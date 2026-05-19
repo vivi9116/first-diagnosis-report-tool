@@ -19,5 +19,13 @@
   "customer_problem": "客户自述问题",
   "report_status": "报告状态",
   "report_link": "报告链接",
-  "notes": "备注"
+  "notes": "备注",
+  "historical_weeks": "历史数据周数",
+  "has_platform_tier_data": "是否有平台同层级数据",
+  "has_industry_peer_data": "是否有行业/同层级数据",
+  "has_gross_margin": "是否有毛利率",
+  "has_ad_attribution": "是否有投放归因",
+  "has_product_cost": "是否有商品成本",
+  "has_inventory_data": "是否有库存数据",
+  "data_source_notes": "数据来源说明"
 }

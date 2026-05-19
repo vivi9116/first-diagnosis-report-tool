@@ -1,6 +1,7 @@
 import json
 
 from .config import load_prompt_template
+from .data_capability import assess_data_capability
 from .llm_client import generate_dry_run_report, generate_with_doubao
 from .models import CustomerData, ValidationResult
 
@@ -12,23 +13,37 @@ SYSTEM_PROMPT = (
     "证据不足时只做事实陈述、初步观察或待验证假设，不输出无依据的强行业结论、"
     "强因果结论、预期差结论、趋势结论、固定阈值结论或高风险经营动作。"
     "正文表达必须和数据边界保持一致，不能前文下强判断、后文再声明不下强判断。"
+    "生成报告前必须先遵守数据可用性等级：没有数据源就不输出强判断；有数据源才标注来源和口径后输出相应深度判断。"
 )
 
 
 def build_judgment_safety_context(data: CustomerData, validation: ValidationResult) -> dict[str, object]:
+    data_capability = assess_data_capability(data)
     return {
         "report_scope": "single_week_first_diagnosis",
-        "has_store_history_baseline": False,
-        "has_industry_or_peer_baseline": False,
-        "has_platform_tier_baseline": False,
+        "data_availability_assessment": data_capability,
+        "has_store_history_baseline": data_capability["has_store_history_baseline"],
+        "has_industry_or_peer_baseline": data_capability["has_platform_tier_or_industry_peer_data"],
+        "has_platform_tier_baseline": data.has_platform_tier_data,
         "has_customer_target_values": False,
         "has_activity_before_after_comparison": False,
-        "has_multi_week_trend_data": False,
-        "has_gross_margin": False,
-        "has_ad_attribution_breakdown": False,
+        "has_multi_week_trend_data": data_capability["has_12_week_trend_window"],
+        "has_gross_margin": data.has_gross_margin,
+        "has_ad_attribution_breakdown": data.has_ad_attribution,
+        "has_product_cost": data.has_product_cost,
+        "has_inventory_data": data.has_inventory_data,
         "has_channel_breakdown": False,
         "has_repeat_purchase_data": False,
         "has_threshold_source": False,
+        "data_source_rule": "没有数据源，就不输出强判断；有数据源，就标注来源和口径。",
+        "data_availability_policy": {
+            "single_week_basic_data": "只能输出首诊假设和低风险验证动作，不输出行业判断、趋势判断、投放效率强判断、利润库存策略。",
+            "near_4_week_data": "可以输出店铺历史对比，但不等同于行业/同层级判断。",
+            "near_12_week_data": "可以输出趋势判断和波动区间。",
+            "platform_tier_or_peer_data": "可以输出行业/同层级判断，但必须标注来源和口径。",
+            "gross_margin_and_ad_attribution": "可以输出投放效率判断。",
+            "product_cost_and_inventory": "可以输出利润和库存策略建议。",
+        },
         "validation_warnings": validation.warnings,
         "allowed_strong_judgments": [
             "客户已提交数据中的确定事实",
@@ -129,6 +144,9 @@ def build_judgment_safety_context(data: CustomerData, validation: ValidationResu
             "required_wording_for_high_risk_actions": "小范围测试/具备条件时验证/验证后再决定，不得直接全量执行",
         },
         "final_safety_review_checklist": [
+            "是否先读取数据可用性等级，再决定判断深度",
+            "只有单周基础数据时，是否仍输出了行业判断、趋势判断、投放效率强判断、利润或库存策略",
+            "有强判断时，是否标注了对应数据来源和口径",
             "是否存在无活动前后对比支撑的强因果判断",
             "是否存在无目标值或历史基准支撑的预期判断",
             "是否存在无历史或行业数据支撑的稳定、合理、异常、达标判断",

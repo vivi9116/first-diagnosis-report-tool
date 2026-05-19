@@ -25,6 +25,14 @@ class CustomerData:
     report_status: str
     report_link: str
     notes: str
+    historical_weeks: int | None = None
+    has_platform_tier_data: bool = False
+    has_industry_peer_data: bool = False
+    has_gross_margin: bool = False
+    has_ad_attribution: bool = False
+    has_product_cost: bool = False
+    has_inventory_data: bool = False
+    data_source_notes: str = ""
 
     def to_prompt_dict(self) -> Dict[str, Any]:
         return asdict(self)

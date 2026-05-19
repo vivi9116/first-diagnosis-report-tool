@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from .config import ensure_output_dir
 from .csv_source import load_from_csv
+from .data_capability import assess_data_capability
 from .docx_renderer import render_docx
 from .notion_source import query_notion_database
 from .report_generator import generate_report_markdown
@@ -28,11 +29,19 @@ def main() -> None:
         customer = query_notion_database(args.customer_id)
 
     validation = validate_customer_data(customer)
+    data_capability = assess_data_capability(customer)
     out_dir = ensure_output_dir()
 
     validation_path = out_dir / f"{customer.customer_id}_数据校验结果.json"
     validation_path.write_text(
-        json.dumps(asdict(validation), ensure_ascii=False, indent=2),
+        json.dumps(
+            {
+                "validation": asdict(validation),
+                "data_availability_assessment": data_capability,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
 

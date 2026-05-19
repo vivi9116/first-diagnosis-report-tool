@@ -1,3 +1,4 @@
+from .data_capability import assess_data_capability
 from .models import CustomerData, ValidationResult
 
 
@@ -37,5 +38,9 @@ def validate_customer_data(data: CustomerData) -> ValidationResult:
         warnings.append("缺少投放数据，投放诊断只能基于客户备注。")
     if data.customer_problem == "":
         warnings.append("客户自述问题为空，首诊报告的主观痛点承接会偏弱。")
+
+    data_capability = assess_data_capability(data)
+    warnings.append(f"数据可用性等级：{data_capability['data_level']}。")
+    warnings.extend(data_capability["blocked_outputs"])
 
     return ValidationResult(ok=len(errors) == 0, warnings=warnings, errors=errors)

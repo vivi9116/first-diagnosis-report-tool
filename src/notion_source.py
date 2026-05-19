@@ -41,6 +41,8 @@ def _property_value(prop: Dict[str, Any]) -> Any:
         return status.get("name", "") if status else ""
     if prop_type == "number":
         return prop.get("number")
+    if prop_type == "checkbox":
+        return prop.get("checkbox", False)
     if prop_type == "url":
         return prop.get("url") or ""
     if prop_type == "date":
