@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI 电商经营数据采集入口 V1</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel login-panel" id="loginPanel">
+        <div class="brand-row">
+          <div class="brand-mark">AI</div>
+          <div>
+            <p class="eyebrow">客户数据采集入口 V1</p>
+            <h1>电商经营数据提交</h1>
+          </div>
+        </div>
+        <p class="muted">
+          输入临时邀请码或正式账号访问码后，页面会自动显示对应的数据提交清单。
+        </p>
+        <form id="accessForm" class="access-form">
+          <label for="accessCode">访问码</label>
+          <div class="inline-control">
+            <input id="accessCode" name="accessCode" autocomplete="one-time-code" placeholder="例如 DEMO-FIRST 或 DEMO-VIP" required>
+            <button type="submit">进入</button>
+          </div>
+        </form>
+        <div class="notice">
+          <strong>临时邀请码</strong> 只用于首诊客户，一次提交生成一份首诊报告。<br>
+          <strong>正式账号</strong> 用于已付款客户，按服务周期提交周报/月报数据。
+        </div>
+      </section>
+
+      <section class="app-layout hidden" id="appPanel">
+        <aside class="sidebar panel">
+          <div class="account-card">
+            <p class="eyebrow">当前客户</p>
+            <h2 id="customerName">-</h2>
+            <p id="accountMeta" class="muted">-</p>
+          </div>
+          <div class="report-switch" id="reportSwitch"></div>
+          <div class="checklist-card">
+            <p class="eyebrow">本次提交清单</p>
+            <ul id="evidenceList"></ul>
+          </div>
+        </aside>
+
+        <section class="panel form-panel">
+          <div class="form-header">
+            <div>
+              <p class="eyebrow" id="formEyebrow">数据提交</p>
+              <h1 id="formTitle">提交清单</h1>
+              <p class="muted" id="formSubtitle"></p>
+            </div>
+            <button class="ghost" id="logoutButton" type="button">退出</button>
+          </div>
+
+          <form id="intakeForm" class="intake-form">
+            <div id="dynamicSections"></div>
+
+            <section class="form-section">
+              <div class="section-title">
+                <h3>截图 / Excel 上传</h3>
+                <p>用于核对填表数据。至少上传一份后台截图或 Excel/CSV。</p>
+              </div>
+              <label class="file-zone" for="files">
+                <span>选择文件</span>
+                <small>支持 PNG、JPG、WEBP、CSV、XLS、XLSX。V1 建议单个文件不超过 4MB。</small>
+              </label>
+              <input id="files" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.csv,.xls,.xlsx">
+              <div class="file-list" id="fileList"></div>
+            </section>
+
+            <section class="form-section">
+              <div class="section-title">
+                <h3>提交前确认</h3>
+                <p>提交后系统会自动审核，审核通过才会写入 Notion 并触发生成流程。</p>
+              </div>
+              <label class="check-row">
+                <input type="checkbox" id="confirmTruth" required>
+                <span>我确认本次提交的数据来自店铺后台或客户真实提供材料。</span>
+              </label>
+              <button class="primary" id="submitButton" type="submit">提交</button>
+            </section>
+          </form>
+
+          <section class="result hidden" id="resultPanel"></section>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
