@@ -30,6 +30,7 @@ export default async function handler(req, res) {
     const payload = await readJson(req);
     const session = getAccessSession(payload.accessCode, loadAccessConfig());
     const submissionType = payload.submissionType || session.allowedSubmissionTypes[0];
+    const submissionMode = payload.submissionMode || 'form';
     const periodKey = periodKeyFromPayload(submissionType, payload);
     const existingSubmissions = await listExistingSubmissions();
     const windowCheck = validateSubmissionWindow(session, { submissionType, periodKey, existingSubmissions });
@@ -46,6 +47,7 @@ export default async function handler(req, res) {
 
     const audit = auditSubmission({
       submissionType,
+      submissionMode,
       formData: {
         ...payload.formData,
         customer_id: payload.formData?.customer_id || session.customerId,
@@ -67,6 +69,7 @@ export default async function handler(req, res) {
       status: audit.canTriggerReport ? 'accepted' : 'needs_supplement',
       session,
       submissionType,
+      submissionMode,
       periodKey,
       audit,
       fileIndex,
