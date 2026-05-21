@@ -128,7 +128,7 @@ test('env access config can define reusable development test accounts', () => {
 test('env access config is merged with reusable development test accounts', () => {
   const config = loadAccessConfig({
     INTAKE_ACCESS_CONFIG: JSON.stringify({
-      temporaryInvites: testAccessConfig.temporaryInvites,
+      temporaryInvites: {},
       formalAccounts: {
         'REAL-VIP': {
           accountId: 'A-REAL',
@@ -136,14 +136,15 @@ test('env access config is merged with reusable development test accounts', () =
           customerName: '真实客户',
           allowedReports: ['weekly'],
         },
-        ...testAccessConfig.formalAccounts,
       },
     }),
+    INTAKE_TEST_ACCESS_CONFIG: JSON.stringify(testAccessConfig),
   });
   const session = getAccessSession('TEST-VIP-OPEN', config);
 
   assert.equal(session.isTestAccount, true);
   assert.deepEqual(session.allowedSubmissionTypes, ['first_diagnosis', 'weekly', 'monthly']);
+  assert.equal(getAccessSession('REAL-VIP', config).customerId, 'REAL');
 });
 
 test('temporary invite cannot submit a second first diagnosis', () => {
