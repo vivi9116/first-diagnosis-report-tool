@@ -37,13 +37,22 @@ test('web intake asks users to choose form or Excel CSV after login', () => {
   assert.match(webIndex, /id="submissionModePanel"/);
   assert.match(webIndex, /填表/);
   assert.match(webIndex, /Excel\/CSV/);
+  assert.match(webIndex, /只需二选一/);
   assert.match(webApp, /renderSubmissionMode/);
   assert.match(webApp, /selectSubmissionMode/);
 });
 
+test('formal accounts go directly to Excel CSV while temporary invites keep two choices', () => {
+  assert.match(webApp, /state\.session\.accountType === 'formal_account'/);
+  assert.match(webApp, /selectSubmissionMode\('spreadsheet'\)/);
+  assert.match(webApp, /renderAccountActions/);
+  assert.match(webApp, /modeLogoutButton\.classList\.toggle\('hidden', isTemporaryInvite\)/);
+  assert.match(webApp, /logoutButton\.classList\.toggle\('hidden', isTemporaryInvite\)/);
+});
+
 test('web intake copy requires screenshot plus data file and hides internal system names', () => {
-  assert.match(webIndex, /截图 \+ Excel 上传/);
-  assert.match(webIndex, /上传后台数据对应的截图/);
+  assert.match(webIndex, /上传文件/);
+  assert.match(webIndex, /截图用于核对关键数字/);
   assert.doesNotMatch(webIndex, /截图 \/ Excel/);
   assert.doesNotMatch(webIndex, /写入 Notion/);
   assert.doesNotMatch(webApp, /Notion/);
@@ -61,8 +70,11 @@ test('submission method changes the third step checklist and data entry surface'
   assert.match(webApp, /evidenceForSubmissionMode/);
   assert.match(webApp, /填表数据 \+ 后台截图/);
   assert.match(webApp, /Excel\/CSV 文件 \+ 后台截图/);
-  assert.match(webApp, /无需逐项填表/);
+  assert.match(webApp, /准备材料/);
+  assert.match(webApp, /主要文件/);
+  assert.match(webApp, /核对材料/);
   assert.doesNotMatch(webApp, /截图\/Excel/);
+  assert.doesNotMatch(webApp, /数据可用性/);
 });
 
 test('intake API forwards submission mode into audit', () => {
@@ -88,6 +100,27 @@ test('formal account exposes weekly and monthly checklists', () => {
 
   assert.equal(session.accountType, 'formal_account');
   assert.deepEqual(session.allowedSubmissionTypes, ['weekly', 'monthly']);
+  assert.equal(checklists.weekly.title, '周报数据提交清单');
+  assert.equal(checklists.monthly.title, '月报数据提交清单');
+});
+
+test('formal account never exposes first diagnosis even if config includes it', () => {
+  const session = getAccessSession('VIP-C901', {
+    temporaryInvites: {},
+    formalAccounts: {
+      'VIP-C901': {
+        accountId: 'A901',
+        customerId: 'C901',
+        customerName: '正式客户误配首诊',
+        plan: 'standard',
+        allowedReports: ['first_diagnosis', 'weekly', 'monthly'],
+      },
+    },
+  });
+  const checklists = getChecklistForSession(session);
+
+  assert.deepEqual(session.allowedSubmissionTypes, ['weekly', 'monthly']);
+  assert.equal(checklists.first_diagnosis, undefined);
   assert.equal(checklists.weekly.title, '周报数据提交清单');
   assert.equal(checklists.monthly.title, '月报数据提交清单');
 });
@@ -122,7 +155,7 @@ test('env access config can define reusable development test accounts', () => {
   assert.deepEqual(temporary.allowedSubmissionTypes, ['first_diagnosis']);
   assert.equal(formal.isTestAccount, true);
   assert.equal(formal.accountType, 'formal_account');
-  assert.deepEqual(formal.allowedSubmissionTypes, ['first_diagnosis', 'weekly', 'monthly']);
+  assert.deepEqual(formal.allowedSubmissionTypes, ['weekly', 'monthly']);
 });
 
 test('env access config is merged with reusable development test accounts', () => {
@@ -143,7 +176,7 @@ test('env access config is merged with reusable development test accounts', () =
   const session = getAccessSession('TEST-VIP-OPEN', config);
 
   assert.equal(session.isTestAccount, true);
-  assert.deepEqual(session.allowedSubmissionTypes, ['first_diagnosis', 'weekly', 'monthly']);
+  assert.deepEqual(session.allowedSubmissionTypes, ['weekly', 'monthly']);
   assert.equal(getAccessSession('REAL-VIP', config).customerId, 'REAL');
 });
 
