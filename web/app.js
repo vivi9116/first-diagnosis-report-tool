@@ -19,6 +19,8 @@ const fileInput = document.querySelector('#files');
 const fileList = document.querySelector('#fileList');
 const resultPanel = document.querySelector('#resultPanel');
 const submitButton = document.querySelector('#submitButton');
+const backToModeButton = document.querySelector('#backToModeButton');
+const submissionModeSummary = document.querySelector('#submissionModeSummary');
 const fileSectionTitle = document.querySelector('#fileSectionTitle');
 const fileSectionHint = document.querySelector('#fileSectionHint');
 const fileZoneLabel = document.querySelector('#fileZoneLabel');
@@ -77,11 +79,21 @@ function renderSubmissionMode() {
 }
 
 function selectSubmissionMode(mode) {
-  state.submissionMode = mode;
+  const isSameMode = state.submissionMode === mode;
+  if (!isSameMode) {
+    state.submissionMode = mode;
+    resetIntakeProgress();
+    renderReportSwitch();
+    renderChecklist();
+  }
   submissionModePanel.classList.add('hidden');
   appPanel.classList.remove('hidden');
-  renderReportSwitch();
-  renderChecklist();
+}
+
+function returnToSubmissionMode() {
+  hideResult();
+  appPanel.classList.add('hidden');
+  submissionModePanel.classList.remove('hidden');
 }
 
 function renderReportSwitch() {
@@ -124,14 +136,57 @@ function inputForField(field) {
 function renderChecklist() {
   hideResult();
   const checklist = state.checklists[state.activeType];
+  const modeLabel = state.submissionMode === 'spreadsheet' ? 'Excel/CSV 文件 + 后台截图' : '填表数据 + 后台截图';
   document.querySelector('#formEyebrow').textContent =
     state.session.accountType === 'temporary_invite' ? '一次性首诊入口' : '正式客户数据入口';
   document.querySelector('#formTitle').textContent = checklist.title;
-  document.querySelector('#formSubtitle').textContent = checklist.subtitle;
+  document.querySelector('#formSubtitle').textContent = `${checklist.subtitle} 当前提交方式：${modeLabel}。`;
   submitButton.textContent = checklist.submitLabel;
+  submissionModeSummary.textContent = modeLabel;
   renderFileSectionCopy();
 
-  evidenceList.innerHTML = checklist.evidence.map((item) => `<li>${item}</li>`).join('');
+  evidenceList.innerHTML = evidenceForSubmissionMode(checklist).map((item) => `<li>${item}</li>`).join('');
+  renderDynamicSections(checklist);
+}
+
+function evidenceForSubmissionMode(checklist) {
+  if (state.submissionMode === 'spreadsheet') {
+    return [
+      '上传后台导出的 Excel/CSV 文件（必传）',
+      '上传后台数据对应截图（必传）',
+      '文件内容需覆盖本次报告周期的数据',
+      '截图需能核对 Excel/CSV 的关键数据口径',
+    ];
+  }
+  return [
+    '填写页面内经营数据（必填项需完整）',
+    '上传后台数据对应截图（必传）',
+    '截图需能核对填表数据的关键口径',
+    `报告类型：${checklist.title}`,
+  ];
+}
+
+function renderDynamicSections(checklist) {
+  if (state.submissionMode === 'spreadsheet') {
+    dynamicSections.innerHTML = `<section class="form-section upload-only-section">
+      <div class="section-title">
+        <h3>上传后台导出数据</h3>
+        <p>无需逐项填表。请直接上传后台导出的 Excel/CSV 文件，并上传对应后台截图用于验证和核对数据。</p>
+      </div>
+      <div class="upload-steps">
+        <div>
+          <strong>1. Excel/CSV 文件</strong>
+          <span>包含本次报告周期内的经营、流量、商品、投放或售后数据。</span>
+        </div>
+        <div>
+          <strong>2. 后台截图</strong>
+          <span>截图内容需要能和 Excel/CSV 中的关键数字互相核对。</span>
+        </div>
+      </div>
+    </section>`;
+    return;
+  }
+
   dynamicSections.innerHTML = checklist.sections.map((section) => {
     const fields = section.fields.map((field) => {
       if (field.internal) return '';
@@ -177,13 +232,13 @@ function kindFromFile(file) {
 
 function renderFileSectionCopy() {
   if (state.submissionMode === 'spreadsheet') {
-    fileSectionTitle.textContent = '截图 + Excel 上传';
-    fileSectionHint.textContent = '请上传后台数据对应的截图，并上传后台导出的 Excel/CSV 文件。截图用于验证和核对数据，是必选项。';
-    fileZoneLabel.textContent = '上传截图 + Excel/CSV';
+    fileSectionTitle.textContent = 'Excel/CSV + 截图上传';
+    fileSectionHint.textContent = '请上传后台导出的 Excel/CSV 文件，并上传对应后台截图。截图用于验证和核对数据，是必选项。';
+    fileZoneLabel.textContent = '上传 Excel/CSV + 截图';
     return;
   }
-  fileSectionTitle.textContent = '后台截图上传';
-  fileSectionHint.textContent = '请上传后台数据对应的截图，用于验证和核对填表数据。截图是必选项。';
+  fileSectionTitle.textContent = '填表截图上传';
+  fileSectionHint.textContent = '你已选择填表提交，请先填写上方经营数据，并上传后台数据对应截图。截图用于验证和核对填表数据，是必选项。';
   fileZoneLabel.textContent = '上传后台截图';
 }
 
@@ -221,7 +276,11 @@ function fileToPayload(file) {
 
 function renderFiles() {
   if (!state.files.length) {
-    fileList.innerHTML = '<div class="file-item">尚未选择文件。</div>';
+    fileList.innerHTML = `<div class="file-item">${
+      state.submissionMode === 'spreadsheet'
+        ? '尚未选择文件。需要上传 Excel/CSV 文件和对应后台截图。'
+        : '尚未选择文件。需要上传后台截图。'
+    }</div>`;
     return;
   }
   fileList.innerHTML = state.files.map((file) => (
@@ -257,20 +316,30 @@ document.querySelector('#modeLogoutButton').addEventListener('click', () => {
   resetSession();
 });
 
+function resetIntakeProgress() {
+  hideResult();
+  intakeForm.reset();
+  state.files = [];
+  fileInput.value = '';
+  renderFiles();
+}
+
 function resetSession() {
   state.accessCode = '';
   state.session = null;
   state.checklists = {};
   state.activeType = '';
   state.submissionMode = '';
-  state.files = [];
   accessForm.reset();
-  intakeForm.reset();
-  renderFiles();
+  resetIntakeProgress();
   submissionModePanel.classList.add('hidden');
   appPanel.classList.add('hidden');
   loginPanel.classList.remove('hidden');
 }
+
+backToModeButton.addEventListener('click', () => {
+  returnToSubmissionMode();
+});
 
 document.querySelector('#logoutButton').addEventListener('click', () => {
   resetSession();
