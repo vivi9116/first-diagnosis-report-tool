@@ -19,6 +19,8 @@ const DEFAULT_ACCESS_CONFIG = {
   },
 };
 
+const FORMAL_SUBMISSION_TYPES = new Set(['weekly', 'monthly']);
+
 function mergeAccessConfig(config = {}) {
   return mergeConfig(DEFAULT_ACCESS_CONFIG, config);
 }
@@ -42,6 +44,12 @@ function parseAccessConfig(raw, name) {
   } catch (error) {
     throw new Error(`${name} 不是合法 JSON：${error.message}`);
   }
+}
+
+function normalizeFormalSubmissionTypes(allowedReports = ['weekly']) {
+  const reportTypes = Array.isArray(allowedReports) ? allowedReports : ['weekly'];
+  const customerFacingTypes = reportTypes.filter((type) => FORMAL_SUBMISSION_TYPES.has(type));
+  return customerFacingTypes.length ? customerFacingTypes : ['weekly'];
 }
 
 export function loadAccessConfig(env = process.env) {
@@ -82,7 +90,7 @@ export function getAccessSession(accessCode, config = loadAccessConfig()) {
       customerId: formalAccount.customerId,
       customerName: formalAccount.customerName || '',
       plan: formalAccount.plan || 'standard',
-      allowedSubmissionTypes: formalAccount.allowedReports || ['weekly'],
+      allowedSubmissionTypes: normalizeFormalSubmissionTypes(formalAccount.allowedReports),
       isTestAccount: Boolean(formalAccount.isTestAccount),
     };
   }
