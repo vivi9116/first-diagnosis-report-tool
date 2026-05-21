@@ -20,26 +20,38 @@ const DEFAULT_ACCESS_CONFIG = {
 };
 
 function mergeAccessConfig(config = {}) {
+  return mergeConfig(DEFAULT_ACCESS_CONFIG, config);
+}
+
+function mergeConfig(base = {}, extra = {}) {
   return {
     temporaryInvites: {
-      ...DEFAULT_ACCESS_CONFIG.temporaryInvites,
-      ...(config.temporaryInvites || {}),
+      ...(base.temporaryInvites || {}),
+      ...(extra.temporaryInvites || {}),
     },
     formalAccounts: {
-      ...DEFAULT_ACCESS_CONFIG.formalAccounts,
-      ...(config.formalAccounts || {}),
+      ...(base.formalAccounts || {}),
+      ...(extra.formalAccounts || {}),
     },
   };
 }
 
+function parseAccessConfig(raw, name) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${name} 不是合法 JSON：${error.message}`);
+  }
+}
+
 export function loadAccessConfig(env = process.env) {
   const raw = env.INTAKE_ACCESS_CONFIG;
-  if (!raw) return DEFAULT_ACCESS_CONFIG;
-  try {
-    return mergeAccessConfig(JSON.parse(raw));
-  } catch (error) {
-    throw new Error(`INTAKE_ACCESS_CONFIG 不是合法 JSON：${error.message}`);
+  const testRaw = env.INTAKE_TEST_ACCESS_CONFIG;
+  const baseConfig = raw ? mergeAccessConfig(parseAccessConfig(raw, 'INTAKE_ACCESS_CONFIG')) : DEFAULT_ACCESS_CONFIG;
+  if (!testRaw) {
+    return baseConfig;
   }
+  return mergeConfig(baseConfig, parseAccessConfig(testRaw, 'INTAKE_TEST_ACCESS_CONFIG'));
 }
 
 export function getAccessSession(accessCode, config = loadAccessConfig()) {
