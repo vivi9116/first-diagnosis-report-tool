@@ -69,6 +69,13 @@ textarea {
   justify-content: space-between;
 }
 
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .brand-row {
   justify-content: flex-start;
 }
@@ -281,6 +288,11 @@ button:disabled {
   padding-top: 18px;
 }
 
+.checklist-card h3 {
+  margin-bottom: 10px;
+  color: var(--accent-dark);
+}
+
 .checklist-card ul {
   margin: 0;
   padding-left: 18px;
@@ -355,6 +367,29 @@ button:disabled {
 .file-zone span {
   color: var(--accent-dark);
   font-weight: 800;
+}
+
+.upload-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.upload-steps div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 14px;
+}
+
+.upload-steps strong {
+  color: var(--accent-dark);
+}
+
+.upload-steps span {
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 #files {
@@ -435,6 +470,19 @@ button:disabled {
   .field-grid,
   .inline-control {
     grid-template-columns: 1fr;
+  }
+
+  .form-header,
+  .mode-header {
+    display: grid;
+  }
+
+  .form-actions {
+    justify-content: stretch;
+  }
+
+  .form-actions button {
+    width: 100%;
   }
 
   .sidebar {
