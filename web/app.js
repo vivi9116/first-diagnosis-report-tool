@@ -3,10 +3,12 @@ const state = {
   session: null,
   checklists: {},
   activeType: '',
+  submissionMode: '',
   files: [],
 };
 
 const loginPanel = document.querySelector('#loginPanel');
+const submissionModePanel = document.querySelector('#submissionModePanel');
 const appPanel = document.querySelector('#appPanel');
 const accessForm = document.querySelector('#accessForm');
 const intakeForm = document.querySelector('#intakeForm');
@@ -17,6 +19,9 @@ const fileInput = document.querySelector('#files');
 const fileList = document.querySelector('#fileList');
 const resultPanel = document.querySelector('#resultPanel');
 const submitButton = document.querySelector('#submitButton');
+const fileSectionTitle = document.querySelector('#fileSectionTitle');
+const fileSectionHint = document.querySelector('#fileSectionHint');
+const fileZoneLabel = document.querySelector('#fileZoneLabel');
 
 function showResult(kind, title, details = []) {
   resultPanel.className = `result ${kind}`;
@@ -49,6 +54,7 @@ function setSession(data) {
   state.session = data.session;
   state.checklists = data.checklists;
   state.activeType = state.session.allowedSubmissionTypes[0];
+  state.submissionMode = '';
 
   document.querySelector('#customerName').textContent = state.session.customerName || state.session.customerId;
   document.querySelector('#accountMeta').textContent =
@@ -57,6 +63,22 @@ function setSession(data) {
       : `正式账号｜${state.session.plan}｜${state.session.customerId}`;
 
   loginPanel.classList.add('hidden');
+  appPanel.classList.add('hidden');
+  renderSubmissionMode();
+  submissionModePanel.classList.remove('hidden');
+}
+
+function renderSubmissionMode() {
+  document.querySelector('#modeCustomerName').textContent = state.session.customerName || state.session.customerId;
+  document.querySelector('#modeAccountMeta').textContent =
+    state.session.accountType === 'temporary_invite'
+      ? `临时邀请码｜${state.session.customerId}`
+      : `正式账号｜${state.session.plan}｜${state.session.customerId}`;
+}
+
+function selectSubmissionMode(mode) {
+  state.submissionMode = mode;
+  submissionModePanel.classList.add('hidden');
   appPanel.classList.remove('hidden');
   renderReportSwitch();
   renderChecklist();
@@ -107,6 +129,7 @@ function renderChecklist() {
   document.querySelector('#formTitle').textContent = checklist.title;
   document.querySelector('#formSubtitle').textContent = checklist.subtitle;
   submitButton.textContent = checklist.submitLabel;
+  renderFileSectionCopy();
 
   evidenceList.innerHTML = checklist.evidence.map((item) => `<li>${item}</li>`).join('');
   dynamicSections.innerHTML = checklist.sections.map((section) => {
@@ -150,6 +173,32 @@ function kindFromFile(file) {
   if (/\.(png|jpg|jpeg|webp)$/.test(name)) return 'screenshot';
   if (/\.(csv|xls|xlsx)$/.test(name)) return 'spreadsheet';
   return 'other';
+}
+
+function renderFileSectionCopy() {
+  if (state.submissionMode === 'spreadsheet') {
+    fileSectionTitle.textContent = '截图 + Excel 上传';
+    fileSectionHint.textContent = '请上传后台数据对应的截图，并上传后台导出的 Excel/CSV 文件。截图用于验证和核对数据，是必选项。';
+    fileZoneLabel.textContent = '上传截图 + Excel/CSV';
+    return;
+  }
+  fileSectionTitle.textContent = '后台截图上传';
+  fileSectionHint.textContent = '请上传后台数据对应的截图，用于验证和核对填表数据。截图是必选项。';
+  fileZoneLabel.textContent = '上传后台截图';
+}
+
+function validateRequiredFiles() {
+  const hasScreenshot = state.files.some((file) => kindFromFile(file) === 'screenshot');
+  const hasSpreadsheet = state.files.some((file) => kindFromFile(file) === 'spreadsheet');
+  if (!hasScreenshot) {
+    showResult('error', '缺少后台截图', ['请上传后台数据对应的截图，用于验证和核对本次提交的数据。']);
+    return false;
+  }
+  if (state.submissionMode === 'spreadsheet' && !hasSpreadsheet) {
+    showResult('error', '缺少 Excel/CSV 文件', ['你选择了 Excel/CSV 提交，请同时上传后台导出的 Excel、XLSX 或 CSV 文件。']);
+    return false;
+  }
+  return true;
 }
 
 function fileToPayload(file) {
@@ -198,22 +247,39 @@ fileInput.addEventListener('change', () => {
   renderFiles();
 });
 
-document.querySelector('#logoutButton').addEventListener('click', () => {
+document.querySelectorAll('[data-mode]').forEach((button) => {
+  button.addEventListener('click', () => {
+    selectSubmissionMode(button.dataset.mode);
+  });
+});
+
+document.querySelector('#modeLogoutButton').addEventListener('click', () => {
+  resetSession();
+});
+
+function resetSession() {
   state.accessCode = '';
   state.session = null;
   state.checklists = {};
   state.activeType = '';
+  state.submissionMode = '';
   state.files = [];
   accessForm.reset();
   intakeForm.reset();
   renderFiles();
+  submissionModePanel.classList.add('hidden');
   appPanel.classList.add('hidden');
   loginPanel.classList.remove('hidden');
+}
+
+document.querySelector('#logoutButton').addEventListener('click', () => {
+  resetSession();
 });
 
 intakeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   hideResult();
+  if (!validateRequiredFiles()) return;
   submitButton.disabled = true;
   submitButton.textContent = '提交中...';
 
@@ -222,6 +288,7 @@ intakeForm.addEventListener('submit', async (event) => {
     const payload = {
       accessCode: state.accessCode,
       submissionType: state.activeType,
+      submissionMode: state.submissionMode,
       formData: collectFormData(),
       files,
     };
