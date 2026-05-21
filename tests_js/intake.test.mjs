@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   getAccessSession,
@@ -7,6 +8,9 @@ import {
   validateSubmissionWindow,
 } from '../api/lib/access.js';
 import { auditSubmission } from '../api/lib/audit.js';
+
+const webIndex = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+const webApp = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
 
 const accessConfig = {
   temporaryInvites: {
@@ -26,6 +30,23 @@ const accessConfig = {
     },
   },
 };
+
+test('web intake asks users to choose form or Excel CSV after login', () => {
+  assert.match(webIndex, /id="submissionModePanel"/);
+  assert.match(webIndex, /填表/);
+  assert.match(webIndex, /Excel\/CSV/);
+  assert.match(webApp, /renderSubmissionMode/);
+  assert.match(webApp, /selectSubmissionMode/);
+});
+
+test('web intake copy requires screenshot plus data file and hides internal system names', () => {
+  assert.match(webIndex, /截图 \+ Excel 上传/);
+  assert.match(webIndex, /上传后台数据对应的截图/);
+  assert.doesNotMatch(webIndex, /截图 \/ Excel/);
+  assert.doesNotMatch(webIndex, /写入 Notion/);
+  assert.doesNotMatch(webApp, /Notion/);
+  assert.match(webIndex, /审核通过后会进入报告生成流程/);
+});
 
 test('temporary invite only exposes first diagnosis checklist', () => {
   const session = getAccessSession('TEMP-C101', accessConfig);
