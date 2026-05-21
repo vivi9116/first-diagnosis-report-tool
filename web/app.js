@@ -146,7 +146,8 @@ function inputForField(field) {
       <label for="${field.key}">${field.label}</label>
     </div>`;
   }
-  return `<input id="${field.key}" name="${field.key}" type="${field.type || 'text'}" value="${value}" ${field.required ? 'required' : ''} placeholder="${field.placeholder || ''}">`;
+  const stepAttribute = field.step ? ` step="${field.step}"` : '';
+  return `<input id="${field.key}" name="${field.key}" type="${field.type || 'text'}" value="${value}"${stepAttribute} ${field.required ? 'required' : ''} placeholder="${field.placeholder || ''}">`;
 }
 
 function renderChecklist() {
@@ -207,13 +208,14 @@ function renderDynamicSections(checklist) {
       if (field.internal) return '';
       const isFull = field.type === 'textarea' || field.type === 'checkbox';
       return `<div class="field ${isFull ? 'full' : ''}">
-        ${field.type === 'checkbox' ? inputForField(field) : `<label for="${field.key}">${field.label}${field.required ? ' *' : ''}</label>${inputForField(field)}`}
+        ${field.type === 'checkbox' ? inputForField(field) : `<label for="${field.key}">${field.label}${field.required ? ' *' : ''}</label>${inputForField(field)}${field.hint ? `<small>${field.hint}</small>` : ''}`}
       </div>`;
     }).join('');
 
     return `<section class="form-section">
       <div class="section-title">
         <h3>${section.title}</h3>
+        <p>*为必填项</p>
       </div>
       <div class="field-grid">${fields}</div>
     </section>`;
@@ -252,8 +254,8 @@ function renderFileSectionCopy() {
     fileZoneLabel.textContent = '上传 Excel/CSV 和截图';
     return;
   }
-  fileSectionTitle.textContent = '填表截图上传';
-  fileSectionHint.textContent = '你已选择填表提交，请先填写上方经营数据，并上传后台数据对应截图。截图用于验证和核对填表数据，是必选项。';
+  fileSectionTitle.textContent = '后台数据截图上传';
+  fileSectionHint.textContent = '请先填写上方经营数据，并上传后台数据对应的截图。截图用于验证和核对填表数据，是必选项。';
   fileZoneLabel.textContent = '上传后台截图';
 }
 
