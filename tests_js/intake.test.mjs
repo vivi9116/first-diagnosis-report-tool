@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   getAccessSession,
   getChecklistForSession,
+  loadAccessConfig,
   validateSubmissionWindow,
 } from '../api/lib/access.js';
 import { auditSubmission } from '../api/lib/audit.js';
@@ -91,6 +92,60 @@ test('formal account exposes weekly and monthly checklists', () => {
   assert.equal(checklists.monthly.title, '月报数据提交清单');
 });
 
+const testAccessConfig = {
+  temporaryInvites: {
+    'TEST-FIRST-OPEN': {
+      customerId: 'TEST-FIRST',
+      customerName: '研发测试临时邀请码',
+      reportType: 'first_diagnosis',
+      isTestAccount: true,
+    },
+  },
+  formalAccounts: {
+    'TEST-VIP-OPEN': {
+      accountId: 'A-TEST-VIP',
+      customerId: 'TEST-VIP',
+      customerName: '研发测试正式账号',
+      plan: 'dev_open',
+      allowedReports: ['first_diagnosis', 'weekly', 'monthly'],
+      isTestAccount: true,
+    },
+  },
+};
+
+test('env access config can define reusable development test accounts', () => {
+  const temporary = getAccessSession('TEST-FIRST-OPEN', testAccessConfig);
+  const formal = getAccessSession('TEST-VIP-OPEN', testAccessConfig);
+
+  assert.equal(temporary.isTestAccount, true);
+  assert.equal(temporary.accountType, 'temporary_invite');
+  assert.deepEqual(temporary.allowedSubmissionTypes, ['first_diagnosis']);
+  assert.equal(formal.isTestAccount, true);
+  assert.equal(formal.accountType, 'formal_account');
+  assert.deepEqual(formal.allowedSubmissionTypes, ['first_diagnosis', 'weekly', 'monthly']);
+});
+
+test('env access config is merged with reusable development test accounts', () => {
+  const config = loadAccessConfig({
+    INTAKE_ACCESS_CONFIG: JSON.stringify({
+      temporaryInvites: testAccessConfig.temporaryInvites,
+      formalAccounts: {
+        'REAL-VIP': {
+          accountId: 'A-REAL',
+          customerId: 'REAL',
+          customerName: '真实客户',
+          allowedReports: ['weekly'],
+        },
+        ...testAccessConfig.formalAccounts,
+      },
+    }),
+  });
+  const session = getAccessSession('TEST-VIP-OPEN', config);
+
+  assert.equal(session.isTestAccount, true);
+  assert.deepEqual(session.allowedSubmissionTypes, ['first_diagnosis', 'weekly', 'monthly']);
+});
+
 test('temporary invite cannot submit a second first diagnosis', () => {
   const session = getAccessSession('TEMP-C101', accessConfig);
   const result = validateSubmissionWindow(session, {
@@ -117,6 +172,29 @@ test('formal weekly account cannot submit twice for the same week', () => {
 
   assert.equal(result.allowed, false);
   assert.match(result.reason, /本周已提交/);
+});
+
+test('test accounts bypass repeated submission limits', () => {
+  const temporary = getAccessSession('TEST-FIRST-OPEN', testAccessConfig);
+  const formal = getAccessSession('TEST-VIP-OPEN', testAccessConfig);
+
+  const firstDiagnosis = validateSubmissionWindow(temporary, {
+    submissionType: 'first_diagnosis',
+    periodKey: '2026-W21',
+    existingSubmissions: [
+      { customerId: 'TEST-FIRST', submissionType: 'first_diagnosis', periodKey: '2026-W20', auditGrade: 'A' },
+    ],
+  });
+  const weekly = validateSubmissionWindow(formal, {
+    submissionType: 'weekly',
+    periodKey: '2026-W21',
+    existingSubmissions: [
+      { customerId: 'TEST-VIP', submissionType: 'weekly', periodKey: '2026-W21', auditGrade: 'A' },
+    ],
+  });
+
+  assert.equal(firstDiagnosis.allowed, true);
+  assert.equal(weekly.allowed, true);
 });
 
 test('audit blocks report generation when core data or evidence is missing', () => {
