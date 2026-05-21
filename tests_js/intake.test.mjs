@@ -11,6 +11,7 @@ import { auditSubmission } from '../api/lib/audit.js';
 
 const webIndex = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const webApp = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+const intakeApi = readFileSync(new URL('../api/intake.js', import.meta.url), 'utf8');
 
 const accessConfig = {
   temporaryInvites: {
@@ -46,6 +47,27 @@ test('web intake copy requires screenshot plus data file and hides internal syst
   assert.doesNotMatch(webIndex, /写入 Notion/);
   assert.doesNotMatch(webApp, /Notion/);
   assert.match(webIndex, /审核通过后会进入报告生成流程/);
+});
+
+test('third step lets customers return to submission method choice', () => {
+  assert.match(webIndex, /id="backToModeButton"/);
+  assert.match(webIndex, /返回上一页/);
+  assert.match(webApp, /returnToSubmissionMode/);
+  assert.match(webApp, /backToModeButton/);
+});
+
+test('submission method changes the third step checklist and data entry surface', () => {
+  assert.match(webApp, /evidenceForSubmissionMode/);
+  assert.match(webApp, /填表数据 \+ 后台截图/);
+  assert.match(webApp, /Excel\/CSV 文件 \+ 后台截图/);
+  assert.match(webApp, /无需逐项填表/);
+  assert.doesNotMatch(webApp, /截图\/Excel/);
+});
+
+test('intake API forwards submission mode into audit', () => {
+  assert.match(intakeApi, /const submissionMode = payload\.submissionMode \|\| 'form'/);
+  assert.match(intakeApi, /submissionMode,/);
+  assert.match(intakeApi, /auditSubmission/);
 });
 
 test('temporary invite only exposes first diagnosis checklist', () => {
@@ -120,6 +142,7 @@ test('audit blocks report generation when core data or evidence is missing', () 
 test('audit allows first diagnosis when core data and evidence are complete', () => {
   const result = auditSubmission({
     submissionType: 'first_diagnosis',
+    submissionMode: 'form',
     formData: {
       customer_id: 'C103',
       customer_name: '完整数据店铺',
@@ -150,6 +173,46 @@ test('audit allows first diagnosis when core data and evidence are complete', ()
   assert.equal(result.grade, 'A');
   assert.equal(result.canTriggerReport, true);
   assert.equal(result.blockingIssues.length, 0);
+});
+
+test('audit allows spreadsheet mode with screenshot and Excel CSV evidence only', () => {
+  const result = auditSubmission({
+    submissionType: 'weekly',
+    submissionMode: 'spreadsheet',
+    formData: {
+      customer_id: 'C900',
+      customer_name: '正式托管客户',
+    },
+    files: [
+      { kind: 'screenshot', name: '经营总览截图.png' },
+      { kind: 'spreadsheet', name: '后台导出.csv' },
+    ],
+  });
+
+  assert.equal(result.grade, 'A');
+  assert.equal(result.canTriggerReport, true);
+  assert.deepEqual(result.missingFields, []);
+  assert.deepEqual(result.blockingIssues, []);
+});
+
+test('audit blocks spreadsheet mode when either screenshot or Excel CSV is missing', () => {
+  const noScreenshot = auditSubmission({
+    submissionType: 'weekly',
+    submissionMode: 'spreadsheet',
+    formData: { customer_id: 'C900', customer_name: '正式托管客户' },
+    files: [{ kind: 'spreadsheet', name: '后台导出.csv' }],
+  });
+  const noSpreadsheet = auditSubmission({
+    submissionType: 'weekly',
+    submissionMode: 'spreadsheet',
+    formData: { customer_id: 'C900', customer_name: '正式托管客户' },
+    files: [{ kind: 'screenshot', name: '经营总览截图.png' }],
+  });
+
+  assert.equal(noScreenshot.grade, 'C');
+  assert.match(noScreenshot.missingEvidence.join('\n'), /后台截图/);
+  assert.equal(noSpreadsheet.grade, 'C');
+  assert.match(noSpreadsheet.missingEvidence.join('\n'), /Excel\/CSV/);
 });
 
 test('audit downgrades to cautious report when ROI logic conflicts', () => {
