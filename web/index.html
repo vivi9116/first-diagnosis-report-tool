@@ -67,6 +67,7 @@
           <div class="report-switch" id="reportSwitch"></div>
           <div class="checklist-card">
             <p class="eyebrow">本次提交清单</p>
+            <h3 id="submissionModeSummary">-</h3>
             <ul id="evidenceList"></ul>
           </div>
         </aside>
@@ -78,7 +79,10 @@
               <h1 id="formTitle">提交清单</h1>
               <p class="muted" id="formSubtitle"></p>
             </div>
-            <button class="ghost" id="logoutButton" type="button">退出</button>
+            <div class="form-actions">
+              <button class="ghost" id="backToModeButton" type="button">返回上一页</button>
+              <button class="ghost" id="logoutButton" type="button">退出</button>
+            </div>
           </div>
 
           <form id="intakeForm" class="intake-form">
