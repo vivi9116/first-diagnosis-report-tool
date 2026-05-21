@@ -20,6 +20,8 @@ const fileList = document.querySelector('#fileList');
 const resultPanel = document.querySelector('#resultPanel');
 const submitButton = document.querySelector('#submitButton');
 const backToModeButton = document.querySelector('#backToModeButton');
+const modeLogoutButton = document.querySelector('#modeLogoutButton');
+const logoutButton = document.querySelector('#logoutButton');
 const submissionModeSummary = document.querySelector('#submissionModeSummary');
 const fileSectionTitle = document.querySelector('#fileSectionTitle');
 const fileSectionHint = document.querySelector('#fileSectionHint');
@@ -63,11 +65,24 @@ function setSession(data) {
     state.session.accountType === 'temporary_invite'
       ? `临时邀请码｜${state.session.customerId}`
       : `正式账号｜${state.session.plan}｜${state.session.customerId}`;
+  renderAccountActions();
 
   loginPanel.classList.add('hidden');
   appPanel.classList.add('hidden');
+  if (state.session.accountType === 'formal_account') {
+    submissionModePanel.classList.add('hidden');
+    selectSubmissionMode('spreadsheet');
+    return;
+  }
   renderSubmissionMode();
   submissionModePanel.classList.remove('hidden');
+}
+
+function renderAccountActions() {
+  const isTemporaryInvite = state.session.accountType === 'temporary_invite';
+  modeLogoutButton.classList.toggle('hidden', isTemporaryInvite);
+  logoutButton.classList.toggle('hidden', isTemporaryInvite);
+  backToModeButton.classList.toggle('hidden', state.session.accountType === 'formal_account');
 }
 
 function renderSubmissionMode() {
@@ -91,6 +106,7 @@ function selectSubmissionMode(mode) {
 }
 
 function returnToSubmissionMode() {
+  if (state.session.accountType === 'formal_account') return;
   hideResult();
   appPanel.classList.add('hidden');
   submissionModePanel.classList.remove('hidden');
@@ -152,10 +168,9 @@ function renderChecklist() {
 function evidenceForSubmissionMode(checklist) {
   if (state.submissionMode === 'spreadsheet') {
     return [
-      '上传后台导出的 Excel/CSV 文件（必传）',
-      '上传后台数据对应截图（必传）',
-      '文件内容需覆盖本次报告周期的数据',
-      '截图需能核对 Excel/CSV 的关键数据口径',
+      '主要文件：后台导出的 Excel/CSV（必传）',
+      '核对材料：同周期后台截图（必传）',
+      '确认文件与截图的数据周期一致',
     ];
   }
   return [
@@ -170,17 +185,17 @@ function renderDynamicSections(checklist) {
   if (state.submissionMode === 'spreadsheet') {
     dynamicSections.innerHTML = `<section class="form-section upload-only-section">
       <div class="section-title">
-        <h3>上传后台导出数据</h3>
-        <p>无需逐项填表。请直接上传后台导出的 Excel/CSV 文件，并上传对应后台截图用于验证和核对数据。</p>
+        <h3>准备材料</h3>
+        <p>请确认两类材料属于同一经营周期，上传时一次选中即可。</p>
       </div>
       <div class="upload-steps">
-        <div>
-          <strong>1. Excel/CSV 文件</strong>
-          <span>包含本次报告周期内的经营、流量、商品、投放或售后数据。</span>
+        <div class="primary-upload-step">
+          <strong>主要文件：Excel/CSV</strong>
+          <span>后台导出的经营、流量、商品、投放或售后数据，用作报告主要数据源。</span>
         </div>
         <div>
-          <strong>2. 后台截图</strong>
-          <span>截图内容需要能和 Excel/CSV 中的关键数字互相核对。</span>
+          <strong>核对材料：后台截图</strong>
+          <span>截取经营总览或关键明细，用来核对文件里的核心数字。</span>
         </div>
       </div>
     </section>`;
@@ -232,9 +247,9 @@ function kindFromFile(file) {
 
 function renderFileSectionCopy() {
   if (state.submissionMode === 'spreadsheet') {
-    fileSectionTitle.textContent = 'Excel/CSV + 截图上传';
-    fileSectionHint.textContent = '请上传后台导出的 Excel/CSV 文件，并上传对应后台截图。截图用于验证和核对数据，是必选项。';
-    fileZoneLabel.textContent = '上传 Excel/CSV + 截图';
+    fileSectionTitle.textContent = '上传文件';
+    fileSectionHint.textContent = '一次上传 Excel/CSV 和同周期后台截图。Excel/CSV 是主要数据来源，截图用于核对关键数字。';
+    fileZoneLabel.textContent = '上传 Excel/CSV 和截图';
     return;
   }
   fileSectionTitle.textContent = '填表截图上传';
@@ -312,7 +327,7 @@ document.querySelectorAll('[data-mode]').forEach((button) => {
   });
 });
 
-document.querySelector('#modeLogoutButton').addEventListener('click', () => {
+modeLogoutButton.addEventListener('click', () => {
   resetSession();
 });
 
@@ -341,7 +356,7 @@ backToModeButton.addEventListener('click', () => {
   returnToSubmissionMode();
 });
 
-document.querySelector('#logoutButton').addEventListener('click', () => {
+logoutButton.addEventListener('click', () => {
   resetSession();
 });
 
