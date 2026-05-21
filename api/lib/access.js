@@ -19,11 +19,24 @@ const DEFAULT_ACCESS_CONFIG = {
   },
 };
 
+function mergeAccessConfig(config = {}) {
+  return {
+    temporaryInvites: {
+      ...DEFAULT_ACCESS_CONFIG.temporaryInvites,
+      ...(config.temporaryInvites || {}),
+    },
+    formalAccounts: {
+      ...DEFAULT_ACCESS_CONFIG.formalAccounts,
+      ...(config.formalAccounts || {}),
+    },
+  };
+}
+
 export function loadAccessConfig(env = process.env) {
   const raw = env.INTAKE_ACCESS_CONFIG;
   if (!raw) return DEFAULT_ACCESS_CONFIG;
   try {
-    return JSON.parse(raw);
+    return mergeAccessConfig(JSON.parse(raw));
   } catch (error) {
     throw new Error(`INTAKE_ACCESS_CONFIG 不是合法 JSON：${error.message}`);
   }
@@ -44,6 +57,7 @@ export function getAccessSession(accessCode, config = loadAccessConfig()) {
       customerName: temporaryInvite.customerName || '',
       plan: 'first_diagnosis',
       allowedSubmissionTypes: [temporaryInvite.reportType || 'first_diagnosis'],
+      isTestAccount: Boolean(temporaryInvite.isTestAccount),
     };
   }
 
@@ -57,6 +71,7 @@ export function getAccessSession(accessCode, config = loadAccessConfig()) {
       customerName: formalAccount.customerName || '',
       plan: formalAccount.plan || 'standard',
       allowedSubmissionTypes: formalAccount.allowedReports || ['weekly'],
+      isTestAccount: Boolean(formalAccount.isTestAccount),
     };
   }
 
@@ -73,6 +88,10 @@ export function validateSubmissionWindow(session, options) {
   const { submissionType, periodKey, existingSubmissions = [] } = options;
   if (!session.allowedSubmissionTypes.includes(submissionType)) {
     return { allowed: false, reason: '当前账号无权提交该类型数据。' };
+  }
+
+  if (session.isTestAccount) {
+    return { allowed: true, reason: '' };
   }
 
   const sameCustomer = existingSubmissions.filter((item) => item.customerId === session.customerId);
