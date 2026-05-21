@@ -51,11 +51,11 @@ export const CHECKLISTS = {
     subtitle: '用于临时邀请码客户，只提交一次，只生成一份首诊报告。',
     submitLabel: '提交并生成首诊报告',
     evidence: [
-      '经营总览截图或后台导出文件',
-      '流量来源截图/Excel（推荐）',
-      '商品表现截图/Excel（推荐）',
-      '投放后台截图/Excel（有投放时必传）',
-      '售后退款截图/Excel（推荐）',
+      '经营总览截图+Excel/CSV',
+      '流量来源截图+Excel（推荐）',
+      '商品表现截图+Excel（推荐）',
+      '投放后台截图+Excel（有投放时必传）',
+      '售后退款截图+Excel（推荐）',
     ],
     sections: [
       {
@@ -88,11 +88,11 @@ export const CHECKLISTS = {
     subtitle: '用于正式账号客户，原则上每周只提交一次，用于生成经营周报。',
     submitLabel: '提交本周周报数据',
     evidence: [
-      '本周经营总览截图/Excel',
-      '本周流量来源截图/Excel',
-      '本周商品表现截图/Excel',
-      '本周投放后台截图/Excel',
-      '本周售后退款截图/Excel',
+      '本周经营总览截图+Excel',
+      '本周流量来源截图+Excel',
+      '本周商品表现截图+Excel',
+      '本周投放后台截图+Excel',
+      '本周售后退款截图+Excel',
     ],
     sections: [
       {
@@ -114,11 +114,11 @@ export const CHECKLISTS = {
     subtitle: '用于正式账号客户，原则上每月只提交一次，用于生成经营月报。',
     submitLabel: '提交本月月报数据',
     evidence: [
-      '近 4 周/本月经营总览导出文件',
-      '近 4 周/本月流量来源导出文件',
-      '商品表现导出文件',
-      '投放明细导出文件',
-      '售后退款导出文件',
+      '近 4 周/本月经营总览截图+Excel/CSV',
+      '近 4 周/本月流量来源截图+Excel/CSV',
+      '商品表现截图+Excel/CSV',
+      '投放明细截图+Excel/CSV',
+      '售后退款截图+Excel/CSV',
       '成本/库存/毛利数据（如有）',
     ],
     sections: [
