@@ -32,6 +32,31 @@
         </div>
       </section>
 
+      <section class="panel mode-panel hidden" id="submissionModePanel">
+        <div class="mode-header">
+          <div>
+            <p class="eyebrow">当前客户</p>
+            <h2 id="modeCustomerName">-</h2>
+            <p id="modeAccountMeta" class="muted">-</p>
+          </div>
+          <button class="ghost" id="modeLogoutButton" type="button">退出</button>
+        </div>
+        <div class="mode-intro">
+          <p class="eyebrow">选择提交方式</p>
+          <h1>本次经营数据怎么提交？</h1>
+        </div>
+        <div class="mode-actions">
+          <button class="mode-card" type="button" data-mode="form">
+            <span>一，填表</span>
+            <small>手动填写经营数据，并上传后台截图作为核对凭证。</small>
+          </button>
+          <button class="mode-card" type="button" data-mode="spreadsheet">
+            <span>二，Excel/CSV</span>
+            <small>上传后台导出的 Excel/CSV，同时上传对应截图用于验证和核对数据。</small>
+          </button>
+        </div>
+      </section>
+
       <section class="app-layout hidden" id="appPanel">
         <aside class="sidebar panel">
           <div class="account-card">
@@ -61,21 +86,21 @@
 
             <section class="form-section">
               <div class="section-title">
-                <h3>截图 / Excel 上传</h3>
-                <p>用于核对填表数据。至少上传一份后台截图或 Excel/CSV。</p>
+                <h3 id="fileSectionTitle">截图 + Excel 上传</h3>
+                <p id="fileSectionHint">请上传后台数据对应的截图，用于验证和核对数据；如选择 Excel/CSV 提交，也请同时上传后台导出文件。截图为必选项。</p>
               </div>
               <label class="file-zone" for="files">
-                <span>选择文件</span>
+                <span id="fileZoneLabel">上传截图和文件</span>
                 <small>支持 PNG、JPG、WEBP、CSV、XLS、XLSX。V1 建议单个文件不超过 4MB。</small>
               </label>
-              <input id="files" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.csv,.xls,.xlsx">
+              <input id="files" type="file" multiple required accept=".png,.jpg,.jpeg,.webp,.csv,.xls,.xlsx">
               <div class="file-list" id="fileList"></div>
             </section>
 
             <section class="form-section">
               <div class="section-title">
                 <h3>提交前确认</h3>
-                <p>提交后系统会自动审核，审核通过才会写入 Notion 并触发生成流程。</p>
+                <p>提交后系统会先进行数据审核；审核通过后会进入报告生成流程，审核不通过会提示需要补充的材料。</p>
               </div>
               <label class="check-row">
                 <input type="checkbox" id="confirmTruth" required>
