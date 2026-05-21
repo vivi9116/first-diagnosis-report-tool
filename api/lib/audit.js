@@ -141,9 +141,10 @@ export function normalizeFormData(formData = {}) {
   return normalized;
 }
 
-export function auditSubmission({ submissionType = 'first_diagnosis', formData = {}, files = [] }) {
+export function auditSubmission({ submissionType = 'first_diagnosis', submissionMode = 'form', formData = {}, files = [] }) {
   const normalized = normalizeFormData(formData);
-  const required = REQUIRED_FIELDS[submissionType] || REQUIRED_FIELDS.first_diagnosis;
+  const isSpreadsheetMode = submissionMode === 'spreadsheet';
+  const required = isSpreadsheetMode ? [] : (REQUIRED_FIELDS[submissionType] || REQUIRED_FIELDS.first_diagnosis);
   const missingFields = required
     .filter((field) => isBlank(normalized[field]))
     .map((field) => FIELD_LABELS[field] || field);
@@ -156,9 +157,14 @@ export function auditSubmission({ submissionType = 'first_diagnosis', formData =
     blockingIssues.push(`缺少必填字段：${missingFields.join('、')}`);
   }
 
-  if (fileGroups.screenshots.length === 0 && fileGroups.spreadsheets.length === 0) {
-    missingEvidence.push('至少上传一份经营后台截图或 Excel/CSV 导出文件，用于核对填表数据。');
-    blockingIssues.push('缺少数据核对凭证。');
+  if (fileGroups.screenshots.length === 0) {
+    missingEvidence.push('缺少后台截图。截图用于验证和核对本次提交的数据，是必选项。');
+    blockingIssues.push('缺少后台截图。');
+  }
+
+  if (isSpreadsheetMode && fileGroups.spreadsheets.length === 0) {
+    missingEvidence.push('缺少 Excel/CSV 文件。你选择了 Excel/CSV 提交，请上传后台导出的 Excel/CSV 文件。');
+    blockingIssues.push('缺少 Excel/CSV 文件。');
   }
 
   const gmv = normalized.gmv;
