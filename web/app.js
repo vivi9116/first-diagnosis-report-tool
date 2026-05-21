@@ -301,7 +301,7 @@ intakeForm.addEventListener('submit', async (event) => {
       ]);
     } else {
       showResult(audit.grade === 'A' ? 'ok' : 'warn', `审核等级 ${audit.grade}：已接收`, [
-        result.notionPage?.url ? `Notion 记录：${result.notionPage.url}` : '',
+        result.notionPage?.url ? `提交记录：${result.notionPage.url}` : '',
         result.workflow?.triggered ? '已自动触发 GitHub Actions。' : result.workflow?.reason || '',
         ...audit.warnings,
       ].filter(Boolean));
