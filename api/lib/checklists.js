@@ -70,17 +70,6 @@ export const CHECKLISTS = {
         title: '经营背景与问题',
         fields: ['weekly_activity', 'customer_problem', 'historical_weeks', 'data_source_notes'],
       },
-      {
-        title: '数据可用性',
-        fields: [
-          'has_platform_tier_data',
-          'has_industry_peer_data',
-          'has_gross_margin',
-          'has_ad_attribution',
-          'has_product_cost',
-          'has_inventory_data',
-        ],
-      },
     ],
   },
   weekly: {
