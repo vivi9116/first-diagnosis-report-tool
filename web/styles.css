@@ -387,6 +387,11 @@ button:disabled {
   color: var(--accent-dark);
 }
 
+.upload-steps .primary-upload-step {
+  border-color: #9fc8c0;
+  background: #edf8f5;
+}
+
 .upload-steps span {
   color: var(--muted);
   line-height: 1.55;
