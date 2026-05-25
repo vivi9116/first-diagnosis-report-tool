@@ -9,6 +9,7 @@ import {
   validateSubmissionWindow,
 } from '../api/lib/access.js';
 import { auditSubmission } from '../api/lib/audit.js';
+import { FIELD_DEFINITIONS } from '../api/lib/checklists.js';
 
 const webIndex = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const webApp = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
@@ -56,7 +57,29 @@ test('web intake copy requires screenshot plus data file and hides internal syst
   assert.doesNotMatch(webIndex, /截图 \/ Excel/);
   assert.doesNotMatch(webIndex, /写入 Notion/);
   assert.doesNotMatch(webApp, /Notion/);
-  assert.match(webIndex, /审核通过后会进入报告生成流程/);
+  assert.doesNotMatch(webApp, /notionPage/);
+  assert.doesNotMatch(webApp, /GitHub Actions/);
+  assert.doesNotMatch(webApp, /提交记录/);
+  assert.match(webApp, /资料已接收/);
+  assert.match(webIndex, /数据资料务必真实准确/);
+  assert.match(webIndex, /提交后系统会提示需要重新补充的材料/);
+  assert.doesNotMatch(webIndex, /审核通过后会进入报告生成流程/);
+  assert.doesNotMatch(webIndex, /数据审核/);
+});
+
+test('form mode explains required fields and backend screenshot upload clearly', () => {
+  assert.match(webApp, /后台数据截图上传/);
+  assert.match(webApp, /请先填写上方经营数据，并上传后台数据对应的截图。截图用于验证和核对填表数据，是必选项/);
+  assert.match(webApp, /\*为必填项/);
+});
+
+test('rate fields allow two decimal places and show decimal hints', () => {
+  for (const key of ['conversion_rate', 'roi', 'refund_rate']) {
+    assert.equal(FIELD_DEFINITIONS[key].step, '0.01');
+    assert.match(FIELD_DEFINITIONS[key].hint, /可保留两位小数/);
+  }
+  assert.match(webApp, /field\.step/);
+  assert.match(webApp, /field\.hint/);
 });
 
 test('third step lets customers return to submission method choice', () => {
