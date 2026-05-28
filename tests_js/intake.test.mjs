@@ -1,13 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import handler, {
+  processIntakePayload,
+  shouldSkipFilePersist,
+} from '../api/intake.js';
 import {
   getAccessSession,
   getChecklistForSession,
   validateSubmissionWindow,
 } from '../api/lib/access.js';
 import { auditSubmission } from '../api/lib/audit.js';
-import { processIntakePayload, shouldSkipFilePersist } from '../api/intake.js';
 
 const accessConfig = {
   temporaryInvites: {
@@ -63,6 +66,20 @@ function intakeDeps(overrides = {}) {
     loadAccessConfigFn: () => accessConfig,
     listExistingSubmissionsFn: async () => [],
     ...overrides,
+  };
+}
+
+function makeMockResponse() {
+  return {
+    statusCode: 0,
+    headers: {},
+    body: '',
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    end(body) {
+      this.body = body;
+    },
   };
 }
 
@@ -284,4 +301,83 @@ test('safe M3 weekly payload skips file persistence, writes Notion, and does not
   assert.equal(notionInput.fileIndex.skipped, true);
   assert.equal(workflowCalled, false);
   assert.equal(result.body.workflow.triggered, false);
+});
+
+test('safe M3 payload returns sanitized diagnostics when a stage fails', async () => {
+  const payload = makeSafeWeeklyPayload({
+    formData: {
+      customer_id: 'M3-SAFE-DIAGNOSTIC',
+      customer_name: 'Sensitive Customer Name',
+      data_source_notes: 'M3_SAFE_DIAGNOSTIC_ONLY',
+    },
+    files: [{ kind: 'screenshot', name: 'm3-safe-diagnostic-fake.png' }],
+  });
+  const env = {
+    NOTION_TOKEN: 'notion_value_should_not_leak',
+    NOTION_DATABASE_ID: 'database_id_should_not_leak',
+    GITHUB_TOKEN: 'github_value_should_not_leak',
+    GITHUB_REPO: 'repo_value_should_not_leak',
+    INTAKE_ACCESS_CONFIG: 'access_config_should_not_leak',
+  };
+
+  const result = await processIntakePayload(payload, intakeDeps({
+    env,
+    saveIntakeFilesFn: async () => {
+      throw new Error('saveIntakeFiles should not run for safe diagnostic payload');
+    },
+    createNotionIntakePageFn: async () => {
+      throw new Error('Notion write failed with external response body that must not be exposed');
+    },
+  }));
+
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.diagnostics.stage, 'create_notion_intake_page');
+  assert.equal(result.body.diagnostics.submissionType, 'weekly');
+  assert.equal(result.body.diagnostics.safeMarkerMatched, true);
+  assert.equal(result.body.diagnostics.skipFilePersistMatched, true);
+  assert.equal(result.body.diagnostics.auditGrade, 'A');
+  assert.equal(result.body.diagnostics.canTriggerReport, true);
+  assert.equal(result.body.diagnostics.fileIndexSkipped, true);
+  assert.equal(result.body.diagnostics.originalFileCount, 1);
+  assert.equal(result.body.diagnostics.envPresence.hasNotionToken, true);
+  assert.equal(result.body.diagnostics.envPresence.hasNotionDatabaseId, true);
+  assert.equal(result.body.diagnostics.envPresence.hasGithubToken, true);
+  assert.equal(result.body.diagnostics.envPresence.hasGithubRepo, true);
+  assert.equal(result.body.diagnostics.envPresence.hasIntakeAccessConfig, true);
+  assert.equal(result.body.diagnostics.errorType, 'Error');
+  assert.equal(result.body.diagnostics.errorMessageSafe, 'notion_error');
+
+  const serialized = JSON.stringify(result.body);
+  assert.doesNotMatch(serialized, /notion_value_should_not_leak/);
+  assert.doesNotMatch(serialized, /database_id_should_not_leak/);
+  assert.doesNotMatch(serialized, /github_value_should_not_leak/);
+  assert.doesNotMatch(serialized, /repo_value_should_not_leak/);
+  assert.doesNotMatch(serialized, /access_config_should_not_leak/);
+  assert.doesNotMatch(serialized, /VIP-C900/);
+  assert.doesNotMatch(serialized, /Sensitive Customer Name/);
+  assert.doesNotMatch(serialized, /external response body/);
+});
+
+test('ordinary payload errors do not return diagnostics from handler', async () => {
+  const payload = makeSafeWeeklyPayload({
+    accessCode: 'INVALID-ORDINARY-CODE',
+    formData: {
+      customer_id: 'C900',
+      customer_name: 'Ordinary Customer Name',
+      data_source_notes: 'ORDINARY_NON_SAFE_TEST',
+    },
+    files: [{ kind: 'screenshot', name: 'ordinary-fake.png' }],
+  });
+  const req = { method: 'POST', body: payload };
+  const res = makeMockResponse();
+
+  await handler(req, res);
+
+  const body = JSON.parse(res.body);
+  assert.equal(res.statusCode, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.diagnostics, undefined);
+  assert.doesNotMatch(res.body, /Ordinary Customer Name/);
+  assert.doesNotMatch(res.body, /VIP-C900/);
 });
