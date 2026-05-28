@@ -69,7 +69,7 @@ function buildDiagnostics(context, error) {
     stage: context.stage,
     submissionType: context.submissionType || '',
     safeMarkerMatched: Boolean(context.safeMarkerMatched),
-    skipFilePersistMatched: Boolean(context.skipFilePersistMatched),
+    skipFilePersistMatched: context.skipFilePersistMatched == null ? null : Boolean(context.skipFilePersistMatched),
     auditGrade: context.audit?.grade || null,
     canTriggerReport: context.audit ? Boolean(context.audit.canTriggerReport) : null,
     fileIndexSkipped: context.fileIndex ? Boolean(context.fileIndex.skipped) : null,
@@ -77,6 +77,63 @@ function buildDiagnostics(context, error) {
     envPresence: envPresence(context.env),
     errorType: error?.name || 'Error',
     errorMessageSafe: safeErrorMessage(error),
+  };
+}
+
+function safeFileCount(payload) {
+  try {
+    if (!Array.isArray(payload?.files)) return null;
+    return payload.files.length;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonPrefix(raw) {
+  if (typeof raw !== 'string') return null;
+
+  const markerIndex = raw.indexOf(',"files"');
+  if (markerIndex > -1) {
+    return JSON.parse(`${raw.slice(0, markerIndex)}}`);
+  }
+
+  const formDataIndex = raw.indexOf(',"formData"');
+  if (formDataIndex > -1) {
+    return JSON.parse(`${raw.slice(0, formDataIndex)}}`);
+  }
+
+  return null;
+}
+
+function safePayloadForHandlerDiagnostics(req) {
+  try {
+    if (req.body && typeof req.body === 'object') return req.body;
+    return parseJsonPrefix(req.body);
+  } catch {
+    return null;
+  }
+}
+
+function safeM3MarkerFromPayload(payload) {
+  const submissionType = payload?.submissionType || '';
+  const safeMarkerMatched = shouldSkipFilePersist({ payload: payload || {}, submissionType });
+  return {
+    matched: safeMarkerMatched,
+    context: {
+      stage: 'read_payload',
+      env: process.env,
+      submissionType,
+      safeMarkerMatched,
+      skipFilePersistMatched: null,
+      originalFileCount: safeFileCount(payload),
+    },
+  };
+}
+
+function buildHandlerDiagnostics(context, error) {
+  return {
+    ...buildDiagnostics(context, error),
+    handlerDiagnostics: true,
   };
 }
 
@@ -192,11 +249,40 @@ export default async function handler(req, res) {
     return sendJson(res, 405, { ok: false, error: '只支持 POST。' });
   }
 
+  let payload;
+  let handlerContext = {
+    stage: 'read_payload',
+    env: process.env,
+    safeMarkerMatched: false,
+    skipFilePersistMatched: null,
+    originalFileCount: null,
+  };
+
   try {
-    const payload = await readJson(req);
+    payload = await readJson(req);
+    const submissionType = payload?.submissionType || '';
+    const safeMarkerMatched = shouldSkipFilePersist({ payload, submissionType });
+    handlerContext = {
+      ...handlerContext,
+      stage: 'process_intake_payload',
+      submissionType,
+      safeMarkerMatched,
+      skipFilePersistMatched: safeMarkerMatched ? true : false,
+      originalFileCount: safeFileCount(payload),
+    };
     const result = await processIntakePayload(payload);
     return sendJson(res, result.statusCode, result.body);
   } catch (error) {
+    const marker = safeM3MarkerFromPayload(payload || safePayloadForHandlerDiagnostics(req));
+    if (handlerContext.safeMarkerMatched || marker.matched) {
+      const diagnosticsContext = handlerContext.safeMarkerMatched ? handlerContext : marker.context;
+      return sendJson(res, 500, {
+        ok: false,
+        error: 'safe_m3_handler_failed',
+        diagnostics: buildHandlerDiagnostics(diagnosticsContext, error),
+      });
+    }
+
     return sendJson(res, 500, { ok: false, error: error.message });
   }
 }

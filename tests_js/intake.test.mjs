@@ -381,3 +381,87 @@ test('ordinary payload errors do not return diagnostics from handler', async () 
   assert.doesNotMatch(res.body, /Ordinary Customer Name/);
   assert.doesNotMatch(res.body, /VIP-C900/);
 });
+
+test('safe M3 malformed JSON returns sanitized handler diagnostics', async () => {
+  const req = {
+    method: 'POST',
+    body: '{"accessCode":"VIP-C900","submissionType":"weekly","skipFilePersist":true,"test_run_type":"m3_weekly_skip_file_persist","formData":{"customer_id":"M3-SAFE-HANDLER","customer_name":"Sensitive Handler Customer","data_source_notes":"M3_SAFE_HANDLER_ONLY"},"files":[{"kind":"screenshot","name":"m3-safe-handler-fake.png"}]',
+  };
+  const res = makeMockResponse();
+
+  await handler(req, res);
+
+  const body = JSON.parse(res.body);
+  assert.equal(res.statusCode, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, 'safe_m3_handler_failed');
+  assert.equal(body.diagnostics.stage, 'read_payload');
+  assert.equal(body.diagnostics.submissionType, 'weekly');
+  assert.equal(body.diagnostics.safeMarkerMatched, true);
+  assert.equal(body.diagnostics.skipFilePersistMatched, null);
+  assert.equal(body.diagnostics.auditGrade, null);
+  assert.equal(body.diagnostics.canTriggerReport, null);
+  assert.equal(body.diagnostics.fileIndexSkipped, null);
+  assert.equal(body.diagnostics.errorType, 'SyntaxError');
+  assert.equal(body.diagnostics.errorMessageSafe, 'json_error');
+
+  const serialized = JSON.stringify(body);
+  assert.doesNotMatch(serialized, /VIP-C900/);
+  assert.doesNotMatch(serialized, /Sensitive Handler Customer/);
+  assert.doesNotMatch(serialized, /m3-safe-handler-fake/);
+});
+
+test('safe M3 outer handler errors return sanitized diagnostics', async () => {
+  const payload = makeSafeWeeklyPayload({
+    formData: {
+      customer_id: 'M3-SAFE-HANDLER',
+      customer_name: 'Sensitive Handler Customer',
+      data_source_notes: 'M3_SAFE_HANDLER_ONLY',
+    },
+  });
+  Object.defineProperty(payload, 'files', {
+    get() {
+      throw new TypeError('files getter failed with private detail should not leak');
+    },
+  });
+  const req = { method: 'POST', body: payload };
+  const res = makeMockResponse();
+
+  await handler(req, res);
+
+  const body = JSON.parse(res.body);
+  assert.equal(res.statusCode, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, 'safe_m3_handler_failed');
+  assert.equal(body.diagnostics.stage, 'process_intake_payload');
+  assert.equal(body.diagnostics.submissionType, 'weekly');
+  assert.equal(body.diagnostics.safeMarkerMatched, true);
+  assert.equal(body.diagnostics.skipFilePersistMatched, true);
+  assert.equal(body.diagnostics.auditGrade, null);
+  assert.equal(body.diagnostics.canTriggerReport, null);
+  assert.equal(body.diagnostics.fileIndexSkipped, null);
+  assert.equal(body.diagnostics.originalFileCount, null);
+  assert.equal(body.diagnostics.errorType, 'TypeError');
+  assert.equal(body.diagnostics.errorMessageSafe, 'internal_error');
+
+  const serialized = JSON.stringify(body);
+  assert.doesNotMatch(serialized, /VIP-C900/);
+  assert.doesNotMatch(serialized, /Sensitive Handler Customer/);
+  assert.doesNotMatch(serialized, /private detail should not leak/);
+});
+
+test('ordinary malformed JSON does not return diagnostics', async () => {
+  const req = {
+    method: 'POST',
+    body: '{"submissionType":"weekly","customer_name":"Ordinary Customer Name"',
+  };
+  const res = makeMockResponse();
+
+  await handler(req, res);
+
+  const body = JSON.parse(res.body);
+  assert.equal(res.statusCode, 500);
+  assert.equal(body.ok, false);
+  assert.equal(body.diagnostics, undefined);
+  assert.doesNotMatch(res.body, /Ordinary Customer Name/);
+});
