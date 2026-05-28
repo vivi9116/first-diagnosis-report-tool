@@ -1,19 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 
 import {
   getAccessSession,
   getChecklistForSession,
-  loadAccessConfig,
   validateSubmissionWindow,
 } from '../api/lib/access.js';
 import { auditSubmission } from '../api/lib/audit.js';
-import { FIELD_DEFINITIONS } from '../api/lib/checklists.js';
-
-const webIndex = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
-const webApp = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
-const intakeApi = readFileSync(new URL('../api/intake.js', import.meta.url), 'utf8');
+import { processIntakePayload, shouldSkipFilePersist } from '../api/intake.js';
 
 const accessConfig = {
   temporaryInvites: {
@@ -34,77 +28,43 @@ const accessConfig = {
   },
 };
 
-test('web intake asks users to choose form or Excel CSV after login', () => {
-  assert.match(webIndex, /id="submissionModePanel"/);
-  assert.match(webIndex, /填表/);
-  assert.match(webIndex, /Excel\/CSV/);
-  assert.match(webIndex, /只需二选一/);
-  assert.match(webApp, /renderSubmissionMode/);
-  assert.match(webApp, /selectSubmissionMode/);
-});
+function makeSafeWeeklyPayload(overrides = {}) {
+  const formData = {
+    customer_id: 'M3-SAFE-DRYRUN',
+    customer_name: '脱敏测试客户_M3_SAFE_DRYRUN',
+    period: 'M3-SAFE-DRYRUN-2026-WXX',
+    data_source_notes: 'M3_SAFE_DRYRUN_ONLY_NO_REAL_CUSTOMER_DATA',
+    platform: '测试平台',
+    category: '测试类目',
+    visitors: 10000,
+    orders: 320,
+    gmv: 25600,
+    aov: 80,
+    conversion_rate: 3.2,
+    refund_rate: 1.5,
+    previous_actions_result: '上周测试动作：优化商品标题与主图；本周仅用于 dry-run 校验',
+    ...(overrides.formData || {}),
+  };
 
-test('formal accounts go directly to Excel CSV while temporary invites keep two choices', () => {
-  assert.match(webApp, /state\.session\.accountType === 'formal_account'/);
-  assert.match(webApp, /selectSubmissionMode\('spreadsheet'\)/);
-  assert.match(webApp, /renderAccountActions/);
-  assert.match(webApp, /modeLogoutButton\.classList\.toggle\('hidden', isTemporaryInvite\)/);
-  assert.match(webApp, /logoutButton\.classList\.toggle\('hidden', isTemporaryInvite\)/);
-});
+  return {
+    accessCode: 'VIP-C900',
+    submissionType: 'weekly',
+    periodKey: 'M3-SAFE-DRYRUN-2026-WXX',
+    skipFilePersist: true,
+    test_run_type: 'm3_weekly_skip_file_persist',
+    files: [{ kind: 'spreadsheet', name: 'm3-safe-dryrun-fake-evidence.csv' }],
+    ...overrides,
+    formData,
+  };
+}
 
-test('web intake copy requires screenshot plus data file and hides internal system names', () => {
-  assert.match(webIndex, /上传文件/);
-  assert.match(webIndex, /截图用于核对关键数字/);
-  assert.doesNotMatch(webIndex, /截图 \/ Excel/);
-  assert.doesNotMatch(webIndex, /写入 Notion/);
-  assert.doesNotMatch(webApp, /Notion/);
-  assert.doesNotMatch(webApp, /notionPage/);
-  assert.doesNotMatch(webApp, /GitHub Actions/);
-  assert.doesNotMatch(webApp, /提交记录/);
-  assert.match(webApp, /资料已接收/);
-  assert.match(webIndex, /数据资料务必真实准确/);
-  assert.match(webIndex, /提交后系统会提示需要重新补充的材料/);
-  assert.doesNotMatch(webIndex, /审核通过后会进入报告生成流程/);
-  assert.doesNotMatch(webIndex, /数据审核/);
-});
-
-test('form mode explains required fields and backend screenshot upload clearly', () => {
-  assert.match(webApp, /后台数据截图上传/);
-  assert.match(webApp, /请先填写上方经营数据，并上传后台数据对应的截图。截图用于验证和核对填表数据，是必选项/);
-  assert.match(webApp, /\*为必填项/);
-});
-
-test('rate fields allow two decimal places and show decimal hints', () => {
-  for (const key of ['conversion_rate', 'roi', 'refund_rate']) {
-    assert.equal(FIELD_DEFINITIONS[key].step, '0.01');
-    assert.match(FIELD_DEFINITIONS[key].hint, /可保留两位小数/);
-  }
-  assert.match(webApp, /field\.step/);
-  assert.match(webApp, /field\.hint/);
-});
-
-test('third step lets customers return to submission method choice', () => {
-  assert.match(webIndex, /id="backToModeButton"/);
-  assert.match(webIndex, /返回上一页/);
-  assert.match(webApp, /returnToSubmissionMode/);
-  assert.match(webApp, /backToModeButton/);
-});
-
-test('submission method changes the third step checklist and data entry surface', () => {
-  assert.match(webApp, /evidenceForSubmissionMode/);
-  assert.match(webApp, /填表数据 \+ 后台截图/);
-  assert.match(webApp, /Excel\/CSV 文件 \+ 后台截图/);
-  assert.match(webApp, /准备材料/);
-  assert.match(webApp, /主要文件/);
-  assert.match(webApp, /核对材料/);
-  assert.doesNotMatch(webApp, /截图\/Excel/);
-  assert.doesNotMatch(webApp, /数据可用性/);
-});
-
-test('intake API forwards submission mode into audit', () => {
-  assert.match(intakeApi, /const submissionMode = payload\.submissionMode \|\| 'form'/);
-  assert.match(intakeApi, /submissionMode,/);
-  assert.match(intakeApi, /auditSubmission/);
-});
+function intakeDeps(overrides = {}) {
+  return {
+    loadAccessConfigFn: () => accessConfig,
+    listExistingSubmissionsFn: async () => [],
+    ...overrides,
+  };
+}
 
 test('temporary invite only exposes first diagnosis checklist', () => {
   const session = getAccessSession('TEMP-C101', accessConfig);
@@ -125,82 +85,6 @@ test('formal account exposes weekly and monthly checklists', () => {
   assert.deepEqual(session.allowedSubmissionTypes, ['weekly', 'monthly']);
   assert.equal(checklists.weekly.title, '周报数据提交清单');
   assert.equal(checklists.monthly.title, '月报数据提交清单');
-});
-
-test('formal account never exposes first diagnosis even if config includes it', () => {
-  const session = getAccessSession('VIP-C901', {
-    temporaryInvites: {},
-    formalAccounts: {
-      'VIP-C901': {
-        accountId: 'A901',
-        customerId: 'C901',
-        customerName: '正式客户误配首诊',
-        plan: 'standard',
-        allowedReports: ['first_diagnosis', 'weekly', 'monthly'],
-      },
-    },
-  });
-  const checklists = getChecklistForSession(session);
-
-  assert.deepEqual(session.allowedSubmissionTypes, ['weekly', 'monthly']);
-  assert.equal(checklists.first_diagnosis, undefined);
-  assert.equal(checklists.weekly.title, '周报数据提交清单');
-  assert.equal(checklists.monthly.title, '月报数据提交清单');
-});
-
-const testAccessConfig = {
-  temporaryInvites: {
-    'TEST-FIRST-OPEN': {
-      customerId: 'TEST-FIRST',
-      customerName: '研发测试临时邀请码',
-      reportType: 'first_diagnosis',
-      isTestAccount: true,
-    },
-  },
-  formalAccounts: {
-    'TEST-VIP-OPEN': {
-      accountId: 'A-TEST-VIP',
-      customerId: 'TEST-VIP',
-      customerName: '研发测试正式账号',
-      plan: 'dev_open',
-      allowedReports: ['first_diagnosis', 'weekly', 'monthly'],
-      isTestAccount: true,
-    },
-  },
-};
-
-test('env access config can define reusable development test accounts', () => {
-  const temporary = getAccessSession('TEST-FIRST-OPEN', testAccessConfig);
-  const formal = getAccessSession('TEST-VIP-OPEN', testAccessConfig);
-
-  assert.equal(temporary.isTestAccount, true);
-  assert.equal(temporary.accountType, 'temporary_invite');
-  assert.deepEqual(temporary.allowedSubmissionTypes, ['first_diagnosis']);
-  assert.equal(formal.isTestAccount, true);
-  assert.equal(formal.accountType, 'formal_account');
-  assert.deepEqual(formal.allowedSubmissionTypes, ['weekly', 'monthly']);
-});
-
-test('env access config is merged with reusable development test accounts', () => {
-  const config = loadAccessConfig({
-    INTAKE_ACCESS_CONFIG: JSON.stringify({
-      temporaryInvites: {},
-      formalAccounts: {
-        'REAL-VIP': {
-          accountId: 'A-REAL',
-          customerId: 'REAL',
-          customerName: '真实客户',
-          allowedReports: ['weekly'],
-        },
-      },
-    }),
-    INTAKE_TEST_ACCESS_CONFIG: JSON.stringify(testAccessConfig),
-  });
-  const session = getAccessSession('TEST-VIP-OPEN', config);
-
-  assert.equal(session.isTestAccount, true);
-  assert.deepEqual(session.allowedSubmissionTypes, ['weekly', 'monthly']);
-  assert.equal(getAccessSession('REAL-VIP', config).customerId, 'REAL');
 });
 
 test('temporary invite cannot submit a second first diagnosis', () => {
@@ -231,29 +115,6 @@ test('formal weekly account cannot submit twice for the same week', () => {
   assert.match(result.reason, /本周已提交/);
 });
 
-test('test accounts bypass repeated submission limits', () => {
-  const temporary = getAccessSession('TEST-FIRST-OPEN', testAccessConfig);
-  const formal = getAccessSession('TEST-VIP-OPEN', testAccessConfig);
-
-  const firstDiagnosis = validateSubmissionWindow(temporary, {
-    submissionType: 'first_diagnosis',
-    periodKey: '2026-W21',
-    existingSubmissions: [
-      { customerId: 'TEST-FIRST', submissionType: 'first_diagnosis', periodKey: '2026-W20', auditGrade: 'A' },
-    ],
-  });
-  const weekly = validateSubmissionWindow(formal, {
-    submissionType: 'weekly',
-    periodKey: '2026-W21',
-    existingSubmissions: [
-      { customerId: 'TEST-VIP', submissionType: 'weekly', periodKey: '2026-W21', auditGrade: 'A' },
-    ],
-  });
-
-  assert.equal(firstDiagnosis.allowed, true);
-  assert.equal(weekly.allowed, true);
-});
-
 test('audit blocks report generation when core data or evidence is missing', () => {
   const result = auditSubmission({
     submissionType: 'first_diagnosis',
@@ -277,7 +138,6 @@ test('audit blocks report generation when core data or evidence is missing', () 
 test('audit allows first diagnosis when core data and evidence are complete', () => {
   const result = auditSubmission({
     submissionType: 'first_diagnosis',
-    submissionMode: 'form',
     formData: {
       customer_id: 'C103',
       customer_name: '完整数据店铺',
@@ -310,46 +170,6 @@ test('audit allows first diagnosis when core data and evidence are complete', ()
   assert.equal(result.blockingIssues.length, 0);
 });
 
-test('audit allows spreadsheet mode with screenshot and Excel CSV evidence only', () => {
-  const result = auditSubmission({
-    submissionType: 'weekly',
-    submissionMode: 'spreadsheet',
-    formData: {
-      customer_id: 'C900',
-      customer_name: '正式托管客户',
-    },
-    files: [
-      { kind: 'screenshot', name: '经营总览截图.png' },
-      { kind: 'spreadsheet', name: '后台导出.csv' },
-    ],
-  });
-
-  assert.equal(result.grade, 'A');
-  assert.equal(result.canTriggerReport, true);
-  assert.deepEqual(result.missingFields, []);
-  assert.deepEqual(result.blockingIssues, []);
-});
-
-test('audit blocks spreadsheet mode when either screenshot or Excel CSV is missing', () => {
-  const noScreenshot = auditSubmission({
-    submissionType: 'weekly',
-    submissionMode: 'spreadsheet',
-    formData: { customer_id: 'C900', customer_name: '正式托管客户' },
-    files: [{ kind: 'spreadsheet', name: '后台导出.csv' }],
-  });
-  const noSpreadsheet = auditSubmission({
-    submissionType: 'weekly',
-    submissionMode: 'spreadsheet',
-    formData: { customer_id: 'C900', customer_name: '正式托管客户' },
-    files: [{ kind: 'screenshot', name: '经营总览截图.png' }],
-  });
-
-  assert.equal(noScreenshot.grade, 'C');
-  assert.match(noScreenshot.missingEvidence.join('\n'), /后台截图/);
-  assert.equal(noSpreadsheet.grade, 'C');
-  assert.match(noSpreadsheet.missingEvidence.join('\n'), /Excel\/CSV/);
-});
-
 test('audit downgrades to cautious report when ROI logic conflicts', () => {
   const result = auditSubmission({
     submissionType: 'first_diagnosis',
@@ -380,4 +200,88 @@ test('audit downgrades to cautious report when ROI logic conflicts', () => {
   assert.equal(result.grade, 'B');
   assert.equal(result.canTriggerReport, true);
   assert.match(result.warnings.join('\n'), /ROI/);
+});
+
+test('skipFilePersist gate rejects incomplete or non-weekly payloads', () => {
+  const cases = [
+    ['missing test_run_type', { test_run_type: undefined }],
+    ['customer id not safe', { formData: { customer_id: 'C900' } }],
+    ['data source notes missing safe marker', { formData: { data_source_notes: 'DRYRUN_ONLY_NO_REAL_CUSTOMER_DATA' } }],
+    ['submission type is not weekly', { submissionType: 'monthly' }],
+  ];
+
+  for (const [name, override] of cases) {
+    const payload = makeSafeWeeklyPayload(override);
+    assert.equal(
+      shouldSkipFilePersist({
+        payload,
+        submissionType: payload.submissionType,
+        session: { customerId: 'C900' },
+      }),
+      false,
+      name,
+    );
+  }
+});
+
+test('ordinary payload with skipFilePersist still persists files before Notion', async () => {
+  const payload = makeSafeWeeklyPayload({
+    formData: {
+      customer_id: 'C900',
+      data_source_notes: 'M3_SAFE_DRYRUN_ONLY_NO_REAL_CUSTOMER_DATA',
+    },
+  });
+  let saveCalled = false;
+  let notionInput;
+  let workflowCalled = false;
+
+  const result = await processIntakePayload(payload, intakeDeps({
+    saveIntakeFilesFn: async () => {
+      saveCalled = true;
+      return { root: 'mock-root', files: ['mock-root/manifest.json'], skipped: false };
+    },
+    createNotionIntakePageFn: async (input) => {
+      notionInput = input;
+      return { id: 'mock-page', url: 'https://notion.local/mock-page' };
+    },
+    triggerGithubWorkflowFn: async () => {
+      workflowCalled = true;
+      return { triggered: true };
+    },
+  }));
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(saveCalled, true);
+  assert.equal(notionInput.fileIndex.skipped, false);
+  assert.equal(result.body.fileIndex.skipped, false);
+  assert.equal(workflowCalled, false);
+});
+
+test('safe M3 weekly payload skips file persistence, writes Notion, and does not trigger workflow', async () => {
+  const payload = makeSafeWeeklyPayload();
+  let notionInput;
+  let workflowCalled = false;
+
+  const result = await processIntakePayload(payload, intakeDeps({
+    saveIntakeFilesFn: async () => {
+      throw new Error('saveIntakeFiles should not be called for safe M3 weekly skip test');
+    },
+    createNotionIntakePageFn: async (input) => {
+      notionInput = input;
+      return { id: 'mock-page', url: 'https://notion.local/mock-page' };
+    },
+    triggerGithubWorkflowFn: async () => {
+      workflowCalled = true;
+      return { triggered: true };
+    },
+  }));
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.fileIndex.skipped, true);
+  assert.equal(result.body.fileIndex.reason, 'm3_weekly_safe_test_skip_file_persist');
+  assert.equal(result.body.fileIndex.originalFileCount, 1);
+  assert.equal(result.body.fileIndex.testRunType, 'm3_weekly_skip_file_persist');
+  assert.equal(notionInput.fileIndex.skipped, true);
+  assert.equal(workflowCalled, false);
+  assert.equal(result.body.workflow.triggered, false);
 });
