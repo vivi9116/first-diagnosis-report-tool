@@ -565,6 +565,173 @@ test('listExistingSubmissions throws sanitized error for Notion query failure', 
       }),
       () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
     ),
-    /notion_query_failed:400/,
+    /list_existing_submissions_failed:notion_query_response:Error/,
   );
+});
+
+test('listExistingSubmissions tolerates null pages and null properties', async () => {
+  const result = await withMockFetch(
+    async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          null,
+          { id: 'page-with-null-properties', properties: null },
+        ],
+      }),
+    }),
+    () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+  );
+
+  assert.deepEqual(result, [
+    {
+      pageId: '',
+      customerId: '',
+      submissionType: 'first_diagnosis',
+      periodKey: '',
+      auditGrade: '',
+    },
+    {
+      pageId: 'page-with-null-properties',
+      customerId: '',
+      submissionType: 'first_diagnosis',
+      periodKey: '',
+      auditGrade: '',
+    },
+  ]);
+});
+
+test('listExistingSubmissions ignores invalid metadata JSON without throwing', async () => {
+  const result = await withMockFetch(
+    async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            id: 'page-with-invalid-meta',
+            properties: {
+              '\u5ba2\u6237\u7f16\u53f7': {
+                type: 'title',
+                title: [{ plain_text: 'SAFE-ID' }],
+              },
+              '\u5907\u6ce8': {
+                type: 'rich_text',
+                rich_text: [{ plain_text: 'INTAKE_META:{invalid-json' }],
+              },
+            },
+          },
+        ],
+      }),
+    }),
+    () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+  );
+
+  assert.deepEqual(result, [
+    {
+      pageId: 'page-with-invalid-meta',
+      customerId: 'SAFE-ID',
+      submissionType: 'first_diagnosis',
+      periodKey: '',
+      auditGrade: '',
+    },
+  ]);
+});
+
+test('listExistingSubmissions throws sanitized substage error when response json fails', async () => {
+  await assert.rejects(
+    withMockFetch(
+      async () => ({
+        ok: true,
+        json: async () => {
+          throw new TypeError('private json parser detail should not leak');
+        },
+      }),
+      () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+    ),
+    (error) => {
+      assert.equal(error.name, 'list_existing_submissions_failed');
+      assert.equal(error.message, 'list_existing_submissions_failed:notion_query_json:TypeError');
+      assert.equal(error.substage, 'notion_query_json');
+      assert.doesNotMatch(error.message, /private json parser detail/);
+      return true;
+    },
+  );
+});
+
+test('listExistingSubmissions throws sanitized substage error for nonstandard Notion error body', async () => {
+  await assert.rejects(
+    withMockFetch(
+      async () => ({
+        ok: false,
+        status: 400,
+        json: async () => 'not an object',
+      }),
+      () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+    ),
+    (error) => {
+      assert.equal(error.name, 'list_existing_submissions_failed');
+      assert.equal(error.message, 'list_existing_submissions_failed:notion_query_validate_body:Error');
+      assert.equal(error.substage, 'notion_query_validate_body');
+      assert.doesNotMatch(error.message, /not an object/);
+      return true;
+    },
+  );
+});
+
+test('safe M3 payload returns listExistingSubmissions substage diagnostics', async () => {
+  const payload = makeSafeWeeklyPayload({
+    formData: {
+      customer_id: 'M3-SAFE-NOTION-DIAGNOSTIC',
+      customer_name: 'Sensitive Notion Diagnostic Customer',
+      data_source_notes: 'M3_SAFE_NOTION_DIAGNOSTIC_ONLY',
+    },
+    files: [{ kind: 'screenshot', name: 'm3-safe-notion-diagnostic-fake.png' }],
+  });
+  const env = {
+    NOTION_TOKEN: 'notion_value_should_not_leak',
+    NOTION_DATABASE_ID: 'database_id_should_not_leak',
+    GITHUB_TOKEN: 'github_value_should_not_leak',
+    GITHUB_REPO: 'repo_value_should_not_leak',
+    INTAKE_ACCESS_CONFIG: 'access_config_should_not_leak',
+  };
+
+  const result = await withMockFetch(
+    async () => ({
+      ok: true,
+      json: async () => {
+        throw new TypeError('private notion json detail should not leak');
+      },
+    }),
+    () => processIntakePayload(payload, intakeDeps({
+      env,
+      listExistingSubmissionsFn: () => listExistingSubmissions({
+        NOTION_TOKEN: 'mock-token',
+        NOTION_DATABASE_ID: 'mock-db',
+      }),
+    })),
+  );
+
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.diagnostics.stage, 'list_existing_submissions');
+  assert.equal(result.body.diagnostics.errorType, 'list_existing_submissions_failed');
+  assert.equal(result.body.diagnostics.errorMessageSafe, 'notion_query_json');
+  assert.equal(result.body.diagnostics.safeMarkerMatched, true);
+  assert.equal(result.body.diagnostics.skipFilePersistMatched, false);
+  assert.equal(result.body.diagnostics.envPresence.hasNotionToken, true);
+  assert.equal(result.body.diagnostics.envPresence.hasNotionDatabaseId, true);
+  assert.equal(result.body.diagnostics.envPresence.hasGithubToken, true);
+  assert.equal(result.body.diagnostics.envPresence.hasGithubRepo, true);
+  assert.equal(result.body.diagnostics.envPresence.hasIntakeAccessConfig, true);
+
+  const serialized = JSON.stringify(result.body);
+  assert.doesNotMatch(serialized, /notion_value_should_not_leak/);
+  assert.doesNotMatch(serialized, /database_id_should_not_leak/);
+  assert.doesNotMatch(serialized, /github_value_should_not_leak/);
+  assert.doesNotMatch(serialized, /repo_value_should_not_leak/);
+  assert.doesNotMatch(serialized, /access_config_should_not_leak/);
+  assert.doesNotMatch(serialized, /mock-token/);
+  assert.doesNotMatch(serialized, /mock-db/);
+  assert.doesNotMatch(serialized, /Sensitive Notion Diagnostic Customer/);
+  assert.doesNotMatch(serialized, /private notion json detail/);
 });

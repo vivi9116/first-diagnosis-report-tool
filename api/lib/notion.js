@@ -77,6 +77,27 @@ function getPlainText(prop) {
   return '';
 }
 
+function isObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function listExistingSubmissionsError(substage, error) {
+  const errorName = error?.name || 'Error';
+  const wrapped = new Error(`list_existing_submissions_failed:${substage}:${errorName}`);
+  wrapped.name = 'list_existing_submissions_failed';
+  wrapped.substage = substage;
+  return wrapped;
+}
+
+function ensureListSubstage(substage, fn) {
+  try {
+    return fn();
+  } catch (error) {
+    if (error?.name === 'list_existing_submissions_failed') throw error;
+    throw listExistingSubmissionsError(substage, error);
+  }
+}
+
 function buildMetadata({ session, submissionType, periodKey, audit, fileIndex }) {
   return {
     marker: 'INTAKE_META',
@@ -151,39 +172,60 @@ export async function createNotionIntakePage(input, env = process.env) {
 export async function listExistingSubmissions(env = process.env) {
   if (!env.NOTION_TOKEN || !env.NOTION_DATABASE_ID) return [];
 
-  const response = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}/query`, {
-    method: 'POST',
-    headers: notionHeaders(env),
-    body: JSON.stringify({ page_size: 100 }),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const code = typeof body?.code === 'string' ? body.code : 'unknown';
-    throw new Error(`notion_query_failed:${response.status}:${code}`);
+  let response;
+  try {
+    response = await fetch(`https://api.notion.com/v1/databases/${env.NOTION_DATABASE_ID}/query`, {
+      method: 'POST',
+      headers: notionHeaders(env),
+      body: JSON.stringify({ page_size: 100 }),
+    });
+  } catch (error) {
+    throw listExistingSubmissionsError('notion_query_start', error);
   }
 
-  const results = Array.isArray(body.results) ? body.results : [];
-  return results.map((page) => {
-    const props = page?.properties || {};
-    const customerId = getPlainText(props['客户编号']);
-    const notes = String(getPlainText(props['备注']) || '');
+  let body;
+  try {
+    body = await response.json();
+  } catch (error) {
+    throw listExistingSubmissionsError('notion_query_json', error);
+  }
+
+  if (!response.ok) {
+    if (!isObject(body)) {
+      throw listExistingSubmissionsError('notion_query_validate_body', new Error('invalid_error_body'));
+    }
+    throw listExistingSubmissionsError('notion_query_response', new Error('notion_query_failed'));
+  }
+
+  const results = ensureListSubstage('notion_query_validate_results', () => (
+    Array.isArray(body?.results) ? body.results : []
+  ));
+
+  return results.map((page) => ensureListSubstage('notion_query_map_page', () => {
+    const props = ensureListSubstage('notion_query_read_properties', () => (
+      isObject(page?.properties) ? page.properties : {}
+    ));
+    const customerId = ensureListSubstage('notion_query_read_title', () => getPlainText(props['客户编号']));
+    const notes = ensureListSubstage('notion_query_read_metadata', () => String(getPlainText(props['备注']) || ''));
     const marker = 'INTAKE_META:';
     const markerIndex = notes.indexOf(marker);
     let meta = {};
     if (markerIndex >= 0) {
-      const jsonText = notes.slice(markerIndex + marker.length).split('\n')[0];
-      try {
-        meta = JSON.parse(jsonText);
-      } catch (_) {
-        meta = {};
-      }
+      ensureListSubstage('notion_query_parse_metadata', () => {
+        const jsonText = notes.slice(markerIndex + marker.length).split('\n')[0];
+        try {
+          meta = JSON.parse(jsonText);
+        } catch (_) {
+          meta = {};
+        }
+      });
     }
-    return {
+    return ensureListSubstage('notion_query_completed', () => ({
       pageId: page?.id || '',
       customerId,
       submissionType: meta.submissionType || 'first_diagnosis',
       periodKey: meta.periodKey || '',
       auditGrade: meta.auditGrade || '',
-    };
-  });
+    }));
+  }));
 }

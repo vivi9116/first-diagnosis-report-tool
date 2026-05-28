@@ -54,6 +54,9 @@ function envPresence(env = process.env) {
 }
 
 function safeErrorMessage(error) {
+  if (error?.name === 'list_existing_submissions_failed') {
+    return error.substage || 'list_existing_submissions';
+  }
   const message = String(error?.message || '').toLowerCase();
   if (message.includes('notion')) return 'notion_error';
   if (message.includes('github')) return 'github_error';
