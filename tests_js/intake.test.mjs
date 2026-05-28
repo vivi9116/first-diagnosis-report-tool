@@ -11,6 +11,7 @@ import {
   validateSubmissionWindow,
 } from '../api/lib/access.js';
 import { auditSubmission } from '../api/lib/audit.js';
+import { listExistingSubmissions } from '../api/lib/notion.js';
 
 const accessConfig = {
   temporaryInvites: {
@@ -81,6 +82,16 @@ function makeMockResponse() {
       this.body = body;
     },
   };
+}
+
+async function withMockFetch(fetchFn, fn) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchFn;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 test('temporary invite only exposes first diagnosis checklist', () => {
@@ -464,4 +475,96 @@ test('ordinary malformed JSON does not return diagnostics', async () => {
   assert.equal(body.ok, false);
   assert.equal(body.diagnostics, undefined);
   assert.doesNotMatch(res.body, /Ordinary Customer Name/);
+});
+
+test('listExistingSubmissions returns empty array for empty Notion results', async () => {
+  const result = await withMockFetch(
+    async () => ({
+      ok: true,
+      json: async () => ({ results: [] }),
+    }),
+    () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+  );
+
+  assert.deepEqual(result, []);
+});
+
+test('listExistingSubmissions tolerates missing Notion properties', async () => {
+  const result = await withMockFetch(
+    async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          { id: 'page-without-properties' },
+          { id: 'page-with-empty-properties', properties: {} },
+        ],
+      }),
+    }),
+    () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+  );
+
+  assert.deepEqual(result, [
+    {
+      pageId: 'page-without-properties',
+      customerId: '',
+      submissionType: 'first_diagnosis',
+      periodKey: '',
+      auditGrade: '',
+    },
+    {
+      pageId: 'page-with-empty-properties',
+      customerId: '',
+      submissionType: 'first_diagnosis',
+      periodKey: '',
+      auditGrade: '',
+    },
+  ]);
+});
+
+test('listExistingSubmissions tolerates empty or malformed text arrays', async () => {
+  const result = await withMockFetch(
+    async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            id: 'page-with-malformed-text',
+            properties: {
+              '客户编号': { type: 'title', title: {} },
+              '备注': { type: 'rich_text', rich_text: {} },
+            },
+          },
+        ],
+      }),
+    }),
+    () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+  );
+
+  assert.deepEqual(result, [
+    {
+      pageId: 'page-with-malformed-text',
+      customerId: '',
+      submissionType: 'first_diagnosis',
+      periodKey: '',
+      auditGrade: '',
+    },
+  ]);
+});
+
+test('listExistingSubmissions throws sanitized error for Notion query failure', async () => {
+  await assert.rejects(
+    withMockFetch(
+      async () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          object: 'error',
+          code: 'validation_error',
+          message: 'external body should not leak',
+        }),
+      }),
+      () => listExistingSubmissions({ NOTION_TOKEN: 'test-token', NOTION_DATABASE_ID: 'test-db' }),
+    ),
+    /notion_query_failed:400/,
+  );
 });

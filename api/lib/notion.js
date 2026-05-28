@@ -60,9 +60,18 @@ function toProperty(type, value) {
 
 function getPlainText(prop) {
   if (!prop) return '';
-  if (prop.type === 'title') return (prop.title || []).map((item) => item.plain_text || '').join('');
-  if (prop.type === 'rich_text') return (prop.rich_text || []).map((item) => item.plain_text || '').join('');
+  if (prop.type === 'title') {
+    const title = Array.isArray(prop.title) ? prop.title : [];
+    return title.map((item) => item?.plain_text || '').join('');
+  }
+  if (prop.type === 'rich_text') {
+    const richTextItems = Array.isArray(prop.rich_text) ? prop.rich_text : [];
+    return richTextItems.map((item) => item?.plain_text || '').join('');
+  }
   if (prop.type === 'select') return prop.select?.name || '';
+  if (prop.type === 'status') return prop.status?.name || '';
+  if (prop.type === 'date') return prop.date?.start || '';
+  if (prop.type === 'formula') return getPlainText(prop.formula);
   if (prop.type === 'number') return prop.number;
   if (prop.type === 'checkbox') return prop.checkbox ? '__YES__' : '__NO__';
   return '';
@@ -149,11 +158,13 @@ export async function listExistingSubmissions(env = process.env) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Notion 查询失败：${response.status} ${JSON.stringify(body)}`);
+    const code = typeof body?.code === 'string' ? body.code : 'unknown';
+    throw new Error(`notion_query_failed:${response.status}:${code}`);
   }
 
-  return (body.results || []).map((page) => {
-    const props = page.properties || {};
+  const results = Array.isArray(body.results) ? body.results : [];
+  return results.map((page) => {
+    const props = page?.properties || {};
     const customerId = getPlainText(props['客户编号']);
     const notes = String(getPlainText(props['备注']) || '');
     const marker = 'INTAKE_META:';
@@ -168,7 +179,7 @@ export async function listExistingSubmissions(env = process.env) {
       }
     }
     return {
-      pageId: page.id,
+      pageId: page?.id || '',
       customerId,
       submissionType: meta.submissionType || 'first_diagnosis',
       periodKey: meta.periodKey || '',
